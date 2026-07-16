@@ -45,3 +45,6 @@ example
 # Claude
 .claude/
 AGENTS.md
+
+# Editor
+.vscode/
