@@ -48,3 +48,6 @@ AGENTS.md
 
 # Editor
 .vscode/
+
+# local env (machine-specific API URL)
+.env
