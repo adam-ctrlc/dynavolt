@@ -2,10 +2,13 @@ pub mod alerts;
 pub mod auth;
 pub mod config;
 pub mod db;
+pub mod device;
 pub mod error;
+pub mod page;
 pub mod readings;
 pub mod settings;
 pub mod state;
+pub mod time;
 pub mod users;
 
 use std::sync::Arc;
@@ -13,7 +16,7 @@ use std::sync::Arc;
 use axum::Json;
 use axum::Router;
 use axum::routing::get;
-use chrono::{DateTime, FixedOffset, Utc};
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
 use tower_http::cors::{Any, CorsLayer};
@@ -23,24 +26,12 @@ use crate::config::Config;
 use crate::error::AppResult;
 use crate::state::AppState;
 
-/// Philippine time (UTC+8). Fixed offset: the country does not observe DST.
-const LOCAL_OFFSET_SECONDS: i32 = 8 * 3600;
-const LOCAL_LABEL_FORMAT: &str = "%B %-d, %Y %-I:%M %p";
-
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Health {
     pub status: &'static str,
     pub checked_at: DateTime<Utc>,
     pub checked_at_label: String,
-}
-
-/// Renders the instant in local time for people; `checked_at` stays UTC for machines.
-fn local_label(now: DateTime<Utc>) -> String {
-    FixedOffset::east_opt(LOCAL_OFFSET_SECONDS).map_or_else(
-        || now.format(LOCAL_LABEL_FORMAT).to_string(),
-        |offset| now.with_timezone(&offset).format(LOCAL_LABEL_FORMAT).to_string(),
-    )
 }
 
 /// Production entrypoint. Connects and serves; never migrates or seeds, because
@@ -51,12 +42,11 @@ pub async fn build(config: &Config) -> AppResult<Router> {
     Ok(router(pool, config))
 }
 
-/// Local development entrypoint. Applies migrations and seeds the starter
-/// accounts against the shared database, then serves.
+/// Local development entrypoint. Applies migrations, then serves. Accounts are
+/// seeded separately by `cargo run --bin seed`, never by a running server.
 pub async fn build_for_dev(config: &Config) -> AppResult<Router> {
     let pool = db::connect(&config.database_url).await?;
     db::migrate(&pool).await?;
-    users::service::seed(&pool).await?;
 
     Ok(router(pool, config))
 }
@@ -75,6 +65,7 @@ fn router(pool: PgPool, config: &Config) -> Router {
         .nest("/readings", readings::routes::router())
         .nest("/alerts", alerts::routes::router())
         .nest("/settings", settings::routes::router())
+        .nest("/device", device::routes::router())
         .nest("/users", users::routes::router())
         .with_state(state);
 
@@ -95,6 +86,6 @@ async fn health() -> Json<Health> {
     Json(Health {
         status: "ok",
         checked_at: now,
-        checked_at_label: local_label(now),
+        checked_at_label: time::local_label(now),
     })
 }

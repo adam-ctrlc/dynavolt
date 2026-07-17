@@ -6,14 +6,13 @@ import Gauge from 'phosphor-react-native/src/icons/Gauge';
 import Gear from 'phosphor-react-native/src/icons/Gear';
 import { ActivityIndicator, View } from 'react-native';
 
+import { TabIcon } from '@/components/tab-icon';
 import { useAuth } from '@/features/auth/context';
+import { NotificationsProvider, useNotifications } from '@/features/notifications/context';
 import { useAppearance } from '@/lib/appearance';
 
 export default function TabsLayout() {
   const { token, user, loading } = useAuth();
-  const { primary } = useAppearance();
-  const { colorScheme } = useColorScheme();
-  const muted = colorScheme === 'dark' ? '#a1a1aa' : '#71717a';
   const isAdmin = user?.role === 'admin';
 
   if (loading) {
@@ -29,6 +28,19 @@ export default function TabsLayout() {
   }
 
   return (
+    <NotificationsProvider watchLogs={isAdmin}>
+      <TabsNav isAdmin={isAdmin} />
+    </NotificationsProvider>
+  );
+}
+
+function TabsNav({ isAdmin }: { isAdmin: boolean }) {
+  const { primary } = useAppearance();
+  const { colorScheme } = useColorScheme();
+  const muted = colorScheme === 'dark' ? '#a1a1aa' : '#71717a';
+  const { activeAlerts, newOverloads } = useNotifications();
+
+  return (
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -39,14 +51,16 @@ export default function TabsLayout() {
         name="dashboard"
         options={{
           title: 'Monitor',
-          tabBarIcon: ({ color }) => <Gauge size={22} weight="bold" color={color} />,
+          tabBarIcon: ({ color }) => <TabIcon icon={Gauge} color={color} />,
         }}
       />
       <Tabs.Screen
         name="alerts"
         options={{
           title: 'Alerts',
-          tabBarIcon: ({ color }) => <Bell size={22} weight="bold" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <TabIcon icon={Bell} color={color} dot={activeAlerts > 0} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -54,7 +68,9 @@ export default function TabsLayout() {
         options={{
           title: 'Logs',
           href: isAdmin ? undefined : null,
-          tabBarIcon: ({ color }) => <ChartLine size={22} weight="bold" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <TabIcon icon={ChartLine} color={color} dot={newOverloads > 0} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -62,7 +78,7 @@ export default function TabsLayout() {
         options={{
           title: 'Settings',
           href: isAdmin ? undefined : null,
-          tabBarIcon: ({ color }) => <Gear size={22} weight="bold" color={color} />,
+          tabBarIcon: ({ color }) => <TabIcon icon={Gear} color={color} />,
         }}
       />
     </Tabs>

@@ -33,6 +33,17 @@ pub enum AppError {
 
 pub type AppResult<T> = Result<T, AppError>;
 
+/// Uppercases the first character for display. `Display` stays lowercase so errors
+/// compose into sentences and logs read conventionally; only the JSON the client
+/// renders verbatim is sentence cased.
+fn sentence_case(message: &str) -> String {
+    let mut chars = message.chars();
+
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let status = match &self {
@@ -53,6 +64,32 @@ impl IntoResponse for AppError {
             tracing::error!(error = ?self, "request failed");
         }
 
-        (status, Json(json!({ "error": self.to_string() }))).into_response()
+        let message = sentence_case(&self.to_string());
+
+        (status, Json(json!({ "error": message }))).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sentence_case_uppercases_only_the_first_character() {
+        assert_eq!(sentence_case("invalid credentials"), "Invalid credentials");
+        assert_eq!(
+            sentence_case("invalid role: nurse"),
+            "Invalid role: nurse"
+        );
+    }
+
+    #[test]
+    fn sentence_case_leaves_already_capitalised_messages_alone() {
+        assert_eq!(sentence_case("Email already registered"), "Email already registered");
+    }
+
+    #[test]
+    fn sentence_case_handles_an_empty_message() {
+        assert_eq!(sentence_case(""), "");
     }
 }

@@ -4,6 +4,10 @@ export type User = {
   id: string;
   email: string;
   role: Role;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  fullName: string;
 };
 
 export type LoginResponse = {

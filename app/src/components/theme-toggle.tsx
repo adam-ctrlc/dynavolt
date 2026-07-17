@@ -4,7 +4,9 @@ import Sun from 'phosphor-react-native/src/icons/Sun';
 
 import { Button } from '@/components/ui/button';
 
-export function ThemeToggle() {
+import { cn } from '@/lib/utils';
+
+export function ThemeToggle({ className }: { className?: string }) {
   const { colorScheme, setColorScheme } = useColorScheme();
   const isDark = colorScheme === 'dark';
   const color = isDark ? '#fafafa' : '#0a0a0a';
@@ -13,13 +15,14 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
+      className={cn('h-8 w-8 rounded-full', className)}
       accessibilityRole="switch"
       accessibilityLabel="Toggle light or dark theme"
       onPress={() => setColorScheme(isDark ? 'light' : 'dark')}>
       {isDark ? (
-        <Moon size={20} weight="fill" color={color} />
+        <Moon size={16} weight="fill" color={color} />
       ) : (
-        <Sun size={20} weight="fill" color={color} />
+        <Sun size={16} weight="fill" color={color} />
       )}
     </Button>
   );

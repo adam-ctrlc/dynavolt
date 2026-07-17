@@ -88,16 +88,22 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     setBackground(DEFAULT_APPEARANCE.background);
   }, []);
 
-  const style = vars({
-    '--primary': primary.channels,
-    '--primary-foreground': '0 0% 100%',
-    '--ring': primary.channels,
-    '--accent': isDark ? accent.dark : accent.light,
-    '--accent-foreground': isDark ? '0 0% 98%' : '0 0% 12%',
-    '--background': isDark ? background.dark : background.light,
-    '--card': isDark ? background.dark : background.light,
-    '--popover': isDark ? background.dark : background.light,
-  });
+  // A fresh vars() object on every render re-applies the whole variable set to the
+  // subtree, so it is rebuilt only when a value it depends on actually changes.
+  const style = useMemo(
+    () =>
+      vars({
+        '--primary': primary.channels,
+        '--primary-foreground': '0 0% 100%',
+        '--ring': primary.channels,
+        '--accent': isDark ? accent.dark : accent.light,
+        '--accent-foreground': isDark ? '0 0% 98%' : '0 0% 12%',
+        '--background': isDark ? background.dark : background.light,
+        '--card': isDark ? background.dark : background.light,
+        '--popover': isDark ? background.dark : background.light,
+      }),
+    [primary.channels, accent.dark, accent.light, background.dark, background.light, isDark]
+  );
 
   const value = useMemo<AppearanceValue>(
     () => ({ primary, accent, background, setPrimary, setAccent, setBackground, applyPreset, reset }),

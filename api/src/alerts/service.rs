@@ -24,7 +24,7 @@ pub async fn evaluate(pool: &PgPool, reading: &Reading, settings: &Settings) -> 
             pool,
             reading.id,
             KIND_TEMPERATURE,
-            &format!("temperature reached {:.1} C", reading.temperature_c),
+            &format!("temperature reached {:.1} °C", reading.temperature_c),
             reading.temperature_c,
             settings.temp_threshold_c,
         )

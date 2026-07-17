@@ -28,3 +28,7 @@ Thumbs.db
 
 .vercel
 .env*
+
+# Holds real account passwords and this repo is public. Cargo auto-discovers it
+# locally, so `cargo run --bin seed` keeps working without it being committed.
+src/bin/seed.rs

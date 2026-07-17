@@ -18,6 +18,10 @@ export function BottomSheet({ visible, title, onClose, children }: BottomSheetPr
   const { height } = useWindowDimensions();
   const fg = colorScheme === 'dark' ? '#fafafa' : '#0a0a0a';
 
+  // A hidden Modal still mounts its children, which kept the sheet's contents
+  // (including WebViews) live and re-rendering behind every screen.
+  if (!visible) return null;
+
   return (
     <Modal
       visible={visible}

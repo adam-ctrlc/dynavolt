@@ -1,4 +1,5 @@
 import { useColorScheme } from 'nativewind';
+import Drop from 'phosphor-react-native/src/icons/Drop';
 import Lightning from 'phosphor-react-native/src/icons/Lightning';
 import PlugsConnected from 'phosphor-react-native/src/icons/PlugsConnected';
 import SignOut from 'phosphor-react-native/src/icons/SignOut';
@@ -8,6 +9,7 @@ import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MetricCard } from '@/components/ac/metric-card';
+import { PowerPanel } from '@/components/ac/power-panel';
 import { AcWaveform } from '@/components/ac/waveform';
 import { AppearanceModal } from '@/components/appearance-modal';
 import { InfoModal } from '@/components/info-modal';
@@ -17,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/features/auth/context';
+import { greet } from '@/features/auth/greeting';
 import * as readings from '@/features/readings/api';
 import { usePoll } from '@/hooks/use-poll';
 import { useAppearance } from '@/lib/appearance';
@@ -45,28 +48,39 @@ export default function DashboardScreen() {
   const overload = data?.status === 'overload';
   const hot = data?.overTemperature ?? false;
 
+  // Recomputed each heartbeat, so the greeting rolls over with the clock.
+  const { greeting, subtitle } = greet(user);
+
   return (
     <SafeAreaView className="bg-background flex-1" edges={['top']}>
       <ScrollView contentContainerClassName="gap-4 p-4 pb-8">
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center gap-2">
-            <Lightning size={22} weight="fill" color={ac} />
-            <View>
-              <Text className="text-lg font-bold">Surveillance</Text>
-              <Text variant="muted" className="text-xs">
-                1 KVA Transformer
+        <View className="gap-2">
+          <View className="flex-row items-center justify-between gap-2">
+            <View className="flex-row items-center gap-2">
+              <Lightning size={16} weight="fill" color={ac} />
+              <Text variant="muted" className="text-[11px] uppercase tracking-wide">
+                Surveillance | 1 KVA Transformer
               </Text>
             </View>
+            <View className="border-border bg-muted/40 dark:bg-input/30 flex-row items-center rounded-full border p-0.5">
+              <ThemeToggle />
+              <View className="bg-border h-4 w-px" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                accessibilityLabel="Sign out"
+                onPress={() => void signOut()}>
+                <SignOut size={16} weight="bold" color={fg} />
+              </Button>
+            </View>
           </View>
-          <View className="flex-row items-center">
-            <ThemeToggle />
-            <Button
-              variant="ghost"
-              size="icon"
-              accessibilityLabel="Sign out"
-              onPress={() => void signOut()}>
-              <SignOut size={20} weight="bold" color={fg} />
-            </Button>
+
+          <View className="gap-0.5">
+            <Text className="text-2xl font-bold leading-tight">{greeting}</Text>
+            <Text variant="muted" className="text-xs">
+              {subtitle}
+            </Text>
           </View>
         </View>
 
@@ -123,16 +137,26 @@ export default function DashboardScreen() {
             icon={Thermometer}
             label="Temp"
             value={data ? data.temperatureC.toFixed(1) : '--'}
-            unit="C"
+            unit="°C"
             iconColor={hot ? danger : ac}
           />
+          <MetricCard
+            className="flex-1"
+            icon={Drop}
+            label="Humidity"
+            value={data?.humidityPct === null || !data ? '--' : data.humidityPct.toFixed(0)}
+            unit="%"
+            iconColor={ac}
+          />
         </View>
+
+        <PowerPanel data={data} accent={ac} />
 
         {hot ? (
           <Card className="border-destructive py-0">
             <CardContent className="p-3">
               <Text className="text-destructive text-sm font-semibold">
-                Temperature above {data?.tempThresholdC} C
+                Temperature above {data?.tempThresholdC} °C
               </Text>
             </CardContent>
           </Card>
@@ -149,9 +173,6 @@ export default function DashboardScreen() {
           </Card>
         ) : null}
 
-        <Text variant="muted" className="text-center text-xs">
-          Signed in as {user?.email} ({user?.role})
-        </Text>
       </ScrollView>
 
       <AppearanceModal visible={showAppearance} onClose={() => setShowAppearance(false)} />

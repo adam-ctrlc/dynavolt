@@ -18,7 +18,10 @@ pub fn router() -> Router<AppState> {
 
 async fn list(State(state): State<AppState>, _admin: AdminUser) -> AppResult<Json<Vec<User>>> {
     let users = sqlx::query_as::<_, User>(
-        "select id, email, role, created_at from users order by created_at",
+        "select id, email, role, first_name, middle_name, last_name,
+                trim(concat_ws(' ', first_name, middle_name, last_name)) as full_name,
+                created_at
+         from users order by created_at",
     )
     .fetch_all(&state.pool)
     .await?;
@@ -39,6 +42,12 @@ async fn create(
     if !body.email.contains('@') {
         return Err(AppError::BadRequest("invalid email".to_owned()));
     }
+    if body.first_name.trim().is_empty() {
+        return Err(AppError::BadRequest("first name is required".to_owned()));
+    }
+    if body.last_name.trim().is_empty() {
+        return Err(AppError::BadRequest("last name is required".to_owned()));
+    }
 
     let taken: Option<Uuid> = sqlx::query_scalar("select id from users where email = $1")
         .bind(body.email.trim().to_lowercase())
@@ -49,7 +58,7 @@ async fn create(
         return Err(AppError::BadRequest("email already registered".to_owned()));
     }
 
-    service::create(&state.pool, &body.email, &body.password, body.role).await?;
+    service::create(&state.pool, &body).await?;
 
     Ok(StatusCode::CREATED)
 }

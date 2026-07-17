@@ -2,7 +2,14 @@ import { Redirect } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import Lightning from 'phosphor-react-native/src/icons/Lightning';
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -63,8 +70,17 @@ export default function LoginScreen() {
             <Text variant="muted" className="text-center text-sm">
               Transformer Alert Management System
             </Text>
+          </View>
+
+          <View className="items-center gap-2">
+            <Image
+              source={require('@/assets/images/phinmacoc.png')}
+              style={{ width: 76, height: 76 }}
+              resizeMode="contain"
+              accessibilityLabel="PHINMA Cagayan de Oro College"
+            />
             <Text variant="muted" className="text-center text-xs">
-              PHINMA-COC
+              PHINMA Cagayan de Oro College
             </Text>
           </View>
 

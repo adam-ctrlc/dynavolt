@@ -5,22 +5,29 @@ use serde::Deserialize;
 
 use crate::auth::extract::{AdminUser, AuthUser};
 use crate::error::{AppError, AppResult};
-use crate::readings::model::{LiveReading, Reading, ReadingInput, TrendPoint};
+use crate::page::{Page, Paging};
+use crate::readings::model::{LiveReading, Reading, ReadingInput, Status, TrendPoint};
 use crate::readings::service;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryQuery {
-    #[serde(default = "default_limit")]
-    pub limit: i64,
-    #[serde(default)]
-    pub offset: i64,
     pub status: Option<String>,
+    /// Free-text search over status, source, power and the local timestamp.
+    pub q: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
 
-const fn default_limit() -> i64 {
-    100
+const DEFAULT_LIMIT: i64 = 20;
+const MAX_LIMIT: i64 = 500;
+
+/// Trims a filter and treats blank as "no filter", so `?q=` behaves like an absent param.
+fn filter(value: Option<String>) -> Option<String> {
+    value
+        .map(|raw| raw.trim().to_owned())
+        .filter(|trimmed| !trimmed.is_empty())
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +70,21 @@ async fn ingest(
             "voltage and current must not be negative".to_owned(),
         ));
     }
+    if body.power_factor.is_some_and(|pf| !(0.0..=1.0).contains(&pf)) {
+        return Err(AppError::BadRequest(
+            "power factor must be between 0 and 1".to_owned(),
+        ));
+    }
+    if body.humidity_pct.is_some_and(|h| !(0.0..=100.0).contains(&h)) {
+        return Err(AppError::BadRequest(
+            "humidity must be between 0 and 100 percent".to_owned(),
+        ));
+    }
+    if body.energy_kwh.is_some_and(|e| e < 0.0) || body.frequency_hz.is_some_and(|f| f < 0.0) {
+        return Err(AppError::BadRequest(
+            "energy and frequency must not be negative".to_owned(),
+        ));
+    }
 
     let reading = service::record(&state.pool, body, "hardware").await?;
 
@@ -73,24 +95,53 @@ async fn history(
     State(state): State<AppState>,
     _admin: AdminUser,
     Query(query): Query<HistoryQuery>,
-) -> AppResult<Json<Vec<Reading>>> {
-    let limit = query.limit.clamp(1, 500);
-    let offset = query.offset.max(0);
+) -> AppResult<Json<Page<Reading>>> {
+    let (limit, offset) =
+        Paging::new(query.limit, query.offset).resolve(DEFAULT_LIMIT, MAX_LIMIT);
+    let status = filter(query.status);
+    let q = filter(query.q);
 
-    let readings = sqlx::query_as::<_, Reading>(
-        "select id, voltage_v, current_a, temperature_c, apparent_power_va, status, source, recorded_at
+    if let Some(status) = status.as_deref() {
+        status.parse::<Status>()?;
+    }
+
+    // Counted separately so `total` covers every match, not just this window.
+    let total: i64 = sqlx::query_scalar(
+        "select count(*) from readings
+         where ($1::text is null or status = $1)
+           and ($2::text is null
+                or status ilike '%' || $2 || '%'
+                or source ilike '%' || $2 || '%'
+                or round(apparent_power_va::numeric)::text ilike '%' || $2 || '%'
+                or to_char(recorded_at + interval '8 hours', 'YYYY-MM-DD HH24:MI') ilike '%' || $2 || '%')",
+    )
+    .bind(status.clone())
+    .bind(q.clone())
+    .fetch_one(&state.pool)
+    .await?;
+
+    // The searchable timestamp is rendered at UTC+8 so a query matches what the app shows.
+    let rows = sqlx::query_as::<_, Reading>(
+        "select id, voltage_v, current_a, temperature_c, apparent_power_va, status, source,
+                power_w, power_factor, frequency_hz, energy_kwh, humidity_pct, recorded_at
          from readings
          where ($1::text is null or status = $1)
+           and ($2::text is null
+                or status ilike '%' || $2 || '%'
+                or source ilike '%' || $2 || '%'
+                or round(apparent_power_va::numeric)::text ilike '%' || $2 || '%'
+                or to_char(recorded_at + interval '8 hours', 'YYYY-MM-DD HH24:MI') ilike '%' || $2 || '%')
          order by recorded_at desc
-         limit $2 offset $3",
+         limit $3 offset $4",
     )
-    .bind(query.status)
+    .bind(status)
+    .bind(q)
     .bind(limit)
     .bind(offset)
     .fetch_all(&state.pool)
     .await?;
 
-    Ok(Json(readings))
+    Ok(Json(Page::new(rows, total, limit, offset)))
 }
 
 async fn trend(

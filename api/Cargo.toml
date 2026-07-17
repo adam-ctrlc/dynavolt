@@ -14,6 +14,11 @@ path = "src/main.rs"
 name = "index"
 path = "api/index.rs"
 
+# The account seeder lives at src/bin/seed.rs and is auto-discovered by cargo.
+# It is deliberately not declared here and not committed: it holds real passwords,
+# and this repo is public. Declaring it would break `cargo build` on a fresh clone,
+# where the file is absent.
+
 [profile.release]
 codegen-units = 1
 lto = "fat"

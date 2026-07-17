@@ -3,9 +3,11 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Deserialize;
 
+use crate::alerts::model;
 use crate::alerts::model::Alert;
 use crate::auth::extract::AuthUser;
 use crate::error::{AppError, AppResult};
+use crate::page::{Page, Paging};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -13,12 +15,22 @@ use crate::state::AppState;
 pub struct ListQuery {
     #[serde(default)]
     pub active: bool,
-    #[serde(default = "default_limit")]
-    pub limit: i64,
+    /// Free-text search over the message and kind.
+    pub q: Option<String>,
+    /// Exact match on `overload` or `temperature`.
+    pub kind: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
 
-const fn default_limit() -> i64 {
-    50
+const DEFAULT_LIMIT: i64 = 20;
+const MAX_LIMIT: i64 = 200;
+
+/// Trims a filter and treats blank as "no filter", so `?q=` behaves like an absent param.
+fn filter(value: Option<String>) -> Option<String> {
+    value
+        .map(|raw| raw.trim().to_owned())
+        .filter(|trimmed| !trimmed.is_empty())
 }
 
 pub fn router() -> Router<AppState> {
@@ -31,25 +43,51 @@ async fn list(
     State(state): State<AppState>,
     _auth: AuthUser,
     Query(query): Query<ListQuery>,
-) -> AppResult<Json<Vec<Alert>>> {
-    let limit = query.limit.clamp(1, 200);
+) -> AppResult<Json<Page<Alert>>> {
+    let (limit, offset) =
+        Paging::new(query.limit, query.offset).resolve(DEFAULT_LIMIT, MAX_LIMIT);
+    let kind = filter(query.kind);
+    let q = filter(query.q);
 
-    let sql = if query.active {
+    if let Some(kind) = kind.as_deref()
+        && kind != model::KIND_OVERLOAD
+        && kind != model::KIND_TEMPERATURE
+    {
+        return Err(AppError::BadRequest(format!("invalid alert kind: {kind}")));
+    }
+
+    // Counted separately so `total` covers every match, not just this window.
+    let total: i64 = sqlx::query_scalar(
+        "select count(*) from alerts
+         where ($1 is false or acknowledged_at is null)
+           and ($2::text is null or kind = $2)
+           and ($3::text is null or message ilike '%' || $3 || '%' or kind ilike '%' || $3 || '%')",
+    )
+    .bind(query.active)
+    .bind(kind.clone())
+    .bind(q.clone())
+    .fetch_one(&state.pool)
+    .await?;
+
+    let rows = sqlx::query_as::<_, Alert>(
         "select id, reading_id, kind, message, value, threshold, created_at,
                 acknowledged_at, acknowledged_by, response_ms
-         from alerts where acknowledged_at is null order by created_at desc limit $1"
-    } else {
-        "select id, reading_id, kind, message, value, threshold, created_at,
-                acknowledged_at, acknowledged_by, response_ms
-         from alerts order by created_at desc limit $1"
-    };
+         from alerts
+         where ($1 is false or acknowledged_at is null)
+           and ($2::text is null or kind = $2)
+           and ($3::text is null or message ilike '%' || $3 || '%' or kind ilike '%' || $3 || '%')
+         order by created_at desc
+         limit $4 offset $5",
+    )
+    .bind(query.active)
+    .bind(kind)
+    .bind(q)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&state.pool)
+    .await?;
 
-    let alerts = sqlx::query_as::<_, Alert>(sql)
-        .bind(limit)
-        .fetch_all(&state.pool)
-        .await?;
-
-    Ok(Json(alerts))
+    Ok(Json(Page::new(rows, total, limit, offset)))
 }
 
 /// Acknowledges an alert and records how long the responder took.

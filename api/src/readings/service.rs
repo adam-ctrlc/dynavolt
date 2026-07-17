@@ -3,6 +3,7 @@ use sqlx::PgPool;
 
 use crate::alerts;
 use crate::error::AppResult;
+use crate::readings::model;
 use crate::readings::model::{LiveReading, Reading, ReadingInput, Status};
 use crate::readings::simulate;
 use crate::settings::model::Settings;
@@ -26,9 +27,12 @@ pub async fn record(pool: &PgPool, input: ReadingInput, source: &str) -> AppResu
     let (apparent_power_va, status) = evaluate(&input, &settings);
 
     let reading = sqlx::query_as::<_, Reading>(
-        "insert into readings (voltage_v, current_a, temperature_c, apparent_power_va, status, source)
-         values ($1, $2, $3, $4, $5, $6)
-         returning id, voltage_v, current_a, temperature_c, apparent_power_va, status, source, recorded_at",
+        "insert into readings
+            (voltage_v, current_a, temperature_c, apparent_power_va, status, source,
+             power_w, power_factor, frequency_hz, energy_kwh, humidity_pct)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         returning id, voltage_v, current_a, temperature_c, apparent_power_va, status, source,
+                   power_w, power_factor, frequency_hz, energy_kwh, humidity_pct, recorded_at",
     )
     .bind(input.voltage_v)
     .bind(input.current_a)
@@ -36,6 +40,11 @@ pub async fn record(pool: &PgPool, input: ReadingInput, source: &str) -> AppResu
     .bind(apparent_power_va)
     .bind(status.as_str())
     .bind(source)
+    .bind(input.power_w)
+    .bind(input.power_factor)
+    .bind(input.frequency_hz)
+    .bind(input.energy_kwh)
+    .bind(input.humidity_pct)
     .fetch_one(pool)
     .await?;
 
@@ -60,18 +69,18 @@ pub async fn live(
     let input = if simulator_enabled {
         simulate::at(now.timestamp_millis())
     } else {
-        latest(pool).await?.map_or(
-            ReadingInput {
-                voltage_v: 0.0,
-                current_a: 0.0,
-                temperature_c: 0.0,
-            },
-            |reading| ReadingInput {
+        latest(pool)
+            .await?
+            .map_or(ReadingInput::core(0.0, 0.0, 0.0), |reading| ReadingInput {
                 voltage_v: reading.voltage_v,
                 current_a: reading.current_a,
                 temperature_c: reading.temperature_c,
-            },
-        )
+                power_w: reading.power_w,
+                power_factor: reading.power_factor,
+                frequency_hz: reading.frequency_hz,
+                energy_kwh: reading.energy_kwh,
+                humidity_pct: reading.humidity_pct,
+            })
     };
 
     let (apparent_power_va, status) = evaluate(&input, &settings);
@@ -90,13 +99,21 @@ pub async fn live(
         temp_threshold_c: settings.temp_threshold_c,
         load_percent: apparent_power_va / settings.load_threshold_va * 100.0,
         over_temperature: input.temperature_c >= settings.temp_threshold_c,
+        power_w: input.power_w,
+        power_factor: input.power_factor,
+        frequency_hz: input.frequency_hz,
+        energy_kwh: input.energy_kwh,
+        humidity_pct: input.humidity_pct,
+        reactive_power_var: model::reactive_power(apparent_power_va, input.power_w),
+        headroom_va: settings.load_threshold_va - apparent_power_va,
         recorded_at: now,
     })
 }
 
 pub async fn latest(pool: &PgPool) -> AppResult<Option<Reading>> {
     let reading = sqlx::query_as::<_, Reading>(
-        "select id, voltage_v, current_a, temperature_c, apparent_power_va, status, source, recorded_at
+        "select id, voltage_v, current_a, temperature_c, apparent_power_va, status, source,
+                power_w, power_factor, frequency_hz, energy_kwh, humidity_pct, recorded_at
          from readings order by recorded_at desc limit 1",
     )
     .fetch_optional(pool)
