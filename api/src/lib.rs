@@ -10,11 +10,12 @@ pub mod users;
 
 use std::sync::Arc;
 
+use axum::Json;
 use axum::Router;
 use axum::routing::get;
-use axum::Json;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use sqlx::PgPool;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
@@ -29,10 +30,25 @@ pub struct Health {
     pub checked_at: DateTime<Utc>,
 }
 
+/// Production entrypoint. Connects and serves; never migrates or seeds, because
+/// serverless would repeat that work on every cold start.
 pub async fn build(config: &Config) -> AppResult<Router> {
     let pool = db::connect(&config.database_url).await?;
+
+    Ok(router(pool, config))
+}
+
+/// Local development entrypoint. Applies migrations and seeds the starter
+/// accounts against the shared database, then serves.
+pub async fn build_for_dev(config: &Config) -> AppResult<Router> {
+    let pool = db::connect(&config.database_url).await?;
+    db::migrate(&pool).await?;
     users::service::seed(&pool).await?;
 
+    Ok(router(pool, config))
+}
+
+fn router(pool: PgPool, config: &Config) -> Router {
     let state = AppState {
         pool,
         jwt_secret: Arc::from(config.jwt_secret.as_str()),
@@ -54,10 +70,10 @@ pub async fn build(config: &Config) -> AppResult<Router> {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    Ok(Router::new()
+    Router::new()
         .nest("/api/v1", v1)
         .layer(cors)
-        .layer(TraceLayer::new_for_http()))
+        .layer(TraceLayer::new_for_http())
 }
 
 async fn health() -> Json<Health> {
