@@ -11,14 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/features/auth/context';
-import type { Role } from '@/features/auth/types';
 import { useAppearance } from '@/lib/appearance';
-import { cn } from '@/lib/utils';
-
-const DEMO = {
-  admin: { email: 'admin@dynavolt.local', password: 'admin1234' },
-  user: { email: 'user@dynavolt.local', password: 'user1234' },
-} satisfies Record<Role, { email: string; password: string }>;
 
 export default function LoginScreen() {
   const { token, signIn } = useAuth();
@@ -27,20 +20,13 @@ export default function LoginScreen() {
   const ac = primary.hex;
   const muted = colorScheme === 'dark' ? '#a1a1aa' : '#71717a';
 
-  const [role, setRole] = useState<Role>('admin');
-  const [email, setEmail] = useState(DEMO.admin.email);
-  const [password, setPassword] = useState(DEMO.admin.password);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   if (token) {
     return <Redirect href="/dashboard" />;
-  }
-
-  function pickRole(next: Role) {
-    setRole(next);
-    setEmail(DEMO[next].email);
-    setPassword(DEMO[next].password);
   }
 
   async function submit() {
@@ -54,6 +40,8 @@ export default function LoginScreen() {
       setBusy(false);
     }
   }
+
+  const canSubmit = email.trim().length > 0 && password.length > 0 && !busy;
 
   return (
     <SafeAreaView className="bg-background flex-1" edges={['top', 'bottom']}>
@@ -82,28 +70,10 @@ export default function LoginScreen() {
 
           <Card>
             <CardContent className="gap-4 p-5">
-              <View className="gap-2">
-                <Text variant="muted" className="text-xs uppercase tracking-wide">
-                  Sign in as
-                </Text>
-                <View className="border-border flex-row rounded-lg border p-1">
-                  {(['admin', 'user'] as const).map((option) => (
-                    <Button
-                      key={option}
-                      size="sm"
-                      variant={role === option ? 'default' : 'ghost'}
-                      className="flex-1"
-                      onPress={() => pickRole(option)}>
-                      <Text className={cn(role === option ? '' : 'text-foreground')}>
-                        {option === 'admin' ? 'Admin' : 'User'}
-                      </Text>
-                    </Button>
-                  ))}
-                </View>
-                <Text variant="muted" className="text-xs">
-                  {role === 'admin'
-                    ? 'Maintenance engineer: full dashboard, thresholds, users, logs.'
-                    : 'Power utility personnel: monitoring, alerts and logs.'}
+              <View className="gap-1">
+                <Text className="font-semibold">Sign in</Text>
+                <Text variant="muted" className="text-sm">
+                  Your access level is set by your account.
                 </Text>
               </View>
 
@@ -113,6 +83,7 @@ export default function LoginScreen() {
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
+                  autoComplete="email"
                   keyboardType="email-address"
                   placeholder="you@example.com"
                 />
@@ -124,15 +95,15 @@ export default function LoginScreen() {
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
+                  autoComplete="password"
                   placeholder="Your password"
+                  onSubmitEditing={() => canSubmit && void submit()}
                 />
               </View>
 
-              {error ? (
-                <Text className="text-destructive text-sm">{error}</Text>
-              ) : null}
+              {error ? <Text className="text-destructive text-sm">{error}</Text> : null}
 
-              <Button onPress={() => void submit()} disabled={busy}>
+              <Button disabled={!canSubmit} onPress={() => void submit()}>
                 {busy ? <ActivityIndicator color={muted} /> : <Text>Sign in</Text>}
               </Button>
             </CardContent>
