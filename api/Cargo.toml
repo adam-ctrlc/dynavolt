@@ -3,6 +3,21 @@ name = "dynavolt-api"
 version = "0.1.0"
 edition = "2024"
 
+# Local development server.
+[[bin]]
+name = "dynavolt-api"
+path = "src/main.rs"
+
+# Vercel serverless function. Each handler in api/ must be its own binary.
+[[bin]]
+name = "index"
+path = "api/index.rs"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3
+
 [dependencies]
 argon2 = "0.5.3"
 axum = "0.8.9"
@@ -14,8 +29,10 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "tls-rustls-ring", "postgres", "uuid", "chrono", "macros", "migrate"] }
 thiserror = "2.0.18"
-tokio = { version = "1.52.4", features = ["rt-multi-thread", "macros", "signal", "net"] }
+tokio = { version = "1.52.4", features = ["rt-multi-thread", "macros", "signal", "net", "sync"] }
+tower = { version = "0.5.3", features = ["util"] }
 tower-http = { version = "0.7.0", features = ["cors", "trace"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 uuid = { version = "1.24.0", features = ["serde", "v4"] }
+vercel_runtime = { version = "=2.3.0", features = ["axum"] }
