@@ -4,6 +4,7 @@ import Bell from 'phosphor-react-native/src/icons/Bell';
 import ChartLine from 'phosphor-react-native/src/icons/ChartLine';
 import Gauge from 'phosphor-react-native/src/icons/Gauge';
 import Gear from 'phosphor-react-native/src/icons/Gear';
+import UserCircle from 'phosphor-react-native/src/icons/UserCircle';
 import { ActivityIndicator, View } from 'react-native';
 
 import { TabIcon } from '@/components/tab-icon';
@@ -79,6 +80,13 @@ function TabsNav({ isAdmin }: { isAdmin: boolean }) {
           title: 'Settings',
           href: isAdmin ? undefined : null,
           tabBarIcon: ({ color }) => <TabIcon icon={Gear} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color }) => <TabIcon icon={UserCircle} color={color} />,
         }}
       />
     </Tabs>

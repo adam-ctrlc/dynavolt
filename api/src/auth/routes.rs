@@ -1,5 +1,6 @@
 use axum::extract::State;
-use axum::routing::{get, post};
+use axum::http::StatusCode;
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -8,6 +9,7 @@ use crate::auth::extract::AuthUser;
 use crate::auth::{Role, jwt, password};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
+use crate::users::model::clean_optional;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -75,10 +77,27 @@ macro_rules! credentials_select {
     };
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProfile {
+    pub first_name: String,
+    #[serde(default)]
+    pub middle_name: Option<String>,
+    pub last_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangePassword {
+    pub current_password: String,
+    pub new_password: String,
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/login", post(login))
-        .route("/me", get(me))
+        .route("/me", get(me).put(update_me))
+        .route("/password", put(change_password))
 }
 
 async fn login(
@@ -118,4 +137,73 @@ async fn me(State(state): State<AppState>, auth: AuthUser) -> AppResult<Json<Use
     let role: Role = found.role.parse()?;
 
     Ok(Json(UserResponse::from_credentials(found, role)))
+}
+
+/// Updates the caller's own name. Email and role are deliberately not editable
+/// here: email is the login identity, and letting an account raise its own role
+/// would defeat the point of having roles.
+async fn update_me(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(body): Json<UpdateProfile>,
+) -> AppResult<Json<UserResponse>> {
+    if body.first_name.trim().is_empty() {
+        return Err(AppError::BadRequest("First name is required".to_owned()));
+    }
+    if body.last_name.trim().is_empty() {
+        return Err(AppError::BadRequest("Last name is required".to_owned()));
+    }
+
+    // RETURNING reflects the new values, so full_name is composed post-update.
+    let found = sqlx::query_as::<_, Credentials>(
+        "update users
+         set first_name = $1, middle_name = $2, last_name = $3
+         where id = $4
+         returning id, email, password_hash, role,
+                   first_name, middle_name, last_name,
+                   trim(concat_ws(' ', first_name, middle_name, last_name)) as full_name",
+    )
+    .bind(body.first_name.trim())
+    .bind(clean_optional(body.middle_name.as_deref()))
+    .bind(body.last_name.trim())
+    .bind(auth.id)
+    .fetch_optional(&state.pool)
+    .await?
+    .ok_or(AppError::NotFound)?;
+
+    let role: Role = found.role.parse()?;
+
+    Ok(Json(UserResponse::from_credentials(found, role)))
+}
+
+async fn change_password(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(body): Json<ChangePassword>,
+) -> AppResult<StatusCode> {
+    if body.new_password.len() < 8 {
+        return Err(AppError::BadRequest(
+            "New password must be at least 8 characters".to_owned(),
+        ));
+    }
+
+    let found = sqlx::query_as::<_, Credentials>(credentials_select!("id = $1"))
+        .bind(auth.id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    // Proves the person holding the token also knows the password, so a stolen
+    // token cannot be used to lock the owner out.
+    if !password::verify(&body.current_password, &found.password_hash) {
+        return Err(AppError::InvalidCredentials);
+    }
+
+    sqlx::query("update users set password_hash = $1 where id = $2")
+        .bind(password::hash(&body.new_password)?)
+        .bind(auth.id)
+        .execute(&state.pool)
+        .await?;
+
+    Ok(StatusCode::NO_CONTENT)
 }

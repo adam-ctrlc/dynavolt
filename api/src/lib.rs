@@ -4,6 +4,7 @@ pub mod config;
 pub mod db;
 pub mod device;
 pub mod error;
+pub mod notifications;
 pub mod page;
 pub mod readings;
 pub mod settings;
@@ -11,7 +12,7 @@ pub mod state;
 pub mod time;
 pub mod users;
 
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 
 use axum::Json;
 use axum::Router;
@@ -34,9 +35,27 @@ pub struct Health {
     pub checked_at_label: String,
 }
 
+/// Chooses the rustls crypto provider for the process.
+///
+/// reqwest is built with `rustls-no-provider` so that it cannot pull in a second
+/// provider alongside the `ring` that sqlx already links: two compiled in leaves
+/// rustls unable to pick, which is a runtime panic rather than a build error. The
+/// cost of that choice is that nothing installs a default, so this does. Without
+/// it, the first outbound request panics on "no rustls crypto provider".
+fn install_crypto_provider() {
+    static ONCE: Once = Once::new();
+
+    ONCE.call_once(|| {
+        // Errs only if another provider won the race, which is the same outcome.
+        drop(rustls::crypto::ring::default_provider().install_default());
+    });
+}
+
 /// Production entrypoint. Connects and serves; never migrates or seeds, because
 /// serverless would repeat that work on every cold start.
 pub async fn build(config: &Config) -> AppResult<Router> {
+    install_crypto_provider();
+
     let pool = db::connect(&config.database_url).await?;
 
     Ok(router(pool, config))
@@ -45,6 +64,8 @@ pub async fn build(config: &Config) -> AppResult<Router> {
 /// Local development entrypoint. Applies migrations, then serves. Accounts are
 /// seeded separately by `cargo run --bin seed`, never by a running server.
 pub async fn build_for_dev(config: &Config) -> AppResult<Router> {
+    install_crypto_provider();
+
     let pool = db::connect(&config.database_url).await?;
     db::migrate(&pool).await?;
 
@@ -66,6 +87,7 @@ fn router(pool: PgPool, config: &Config) -> Router {
         .nest("/alerts", alerts::routes::router())
         .nest("/settings", settings::routes::router())
         .nest("/device", device::routes::router())
+        .nest("/notifications", notifications::routes::router())
         .nest("/users", users::routes::router())
         .with_state(state);
 

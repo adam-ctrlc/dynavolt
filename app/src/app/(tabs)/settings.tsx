@@ -1,9 +1,11 @@
+import { router } from 'expo-router';
 import { useColorScheme } from 'nativewind';
 import Check from 'phosphor-react-native/src/icons/Check';
 import Gear from 'phosphor-react-native/src/icons/Gear';
 import Lightning from 'phosphor-react-native/src/icons/Lightning';
 import PencilSimple from 'phosphor-react-native/src/icons/PencilSimple';
 import Thermometer from 'phosphor-react-native/src/icons/Thermometer';
+import Users from 'phosphor-react-native/src/icons/Users';
 import X from 'phosphor-react-native/src/icons/X';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
@@ -195,6 +197,21 @@ export default function SettingsScreen() {
                 </Button>
               </View>
             ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className="gap-0 py-0">
+          <CardHeader className="border-border border-b p-4">
+            <CardTitle className="text-base">User Management</CardTitle>
+            <Text variant="muted" className="text-xs">
+              Create accounts for engineers and utility personnel, or revoke access.
+            </Text>
+          </CardHeader>
+          <CardContent className="p-4">
+            <Button variant="outline" onPress={() => router.push('/users')}>
+              <Users size={16} weight="bold" color={primary.hex} />
+              <Text>Manage accounts</Text>
+            </Button>
           </CardContent>
         </Card>
 

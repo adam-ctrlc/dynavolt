@@ -1,21 +1,36 @@
 import { useColorScheme } from 'nativewind';
 import type { IconProps } from 'phosphor-react-native';
+import Bell from 'phosphor-react-native/src/icons/Bell';
+import ChartLine from 'phosphor-react-native/src/icons/ChartLine';
+import Drop from 'phosphor-react-native/src/icons/Drop';
 import Gauge from 'phosphor-react-native/src/icons/Gauge';
+import Gear from 'phosphor-react-native/src/icons/Gear';
 import Lightning from 'phosphor-react-native/src/icons/Lightning';
 import Palette from 'phosphor-react-native/src/icons/Palette';
 import PlugsConnected from 'phosphor-react-native/src/icons/PlugsConnected';
-import Power from 'phosphor-react-native/src/icons/Power';
 import Pulse from 'phosphor-react-native/src/icons/Pulse';
 import Sun from 'phosphor-react-native/src/icons/Sun';
+import Thermometer from 'phosphor-react-native/src/icons/Thermometer';
+import UserCircle from 'phosphor-react-native/src/icons/UserCircle';
 import WaveSine from 'phosphor-react-native/src/icons/WaveSine';
-import type { ComponentType } from 'react';
+import Warning from 'phosphor-react-native/src/icons/Warning';
+import { useState, type ComponentType } from 'react';
 import { View } from 'react-native';
 
 import { BottomSheet } from '@/components/bottom-sheet';
 import { Formula } from '@/components/formula';
+import { Segmented } from '@/components/ui/segmented';
 import { Text } from '@/components/ui/text';
-import type { FormulaName } from '@/lib/katex-assets';
+import { useAuth } from '@/features/auth/context';
 import { useAppearance } from '@/lib/appearance';
+import type { FormulaName } from '@/lib/katex-assets';
+
+type Tab = 'usage' | 'readings';
+
+const TABS = [
+  { label: 'Using the app', value: 'usage' as Tab, icon: Gauge },
+  { label: 'The readings', value: 'readings' as Tab, icon: WaveSine },
+];
 
 function IconItem({
   icon: Icon,
@@ -60,24 +75,99 @@ function SectionTitle({ children }: { children: string }) {
   );
 }
 
-export function InfoModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { colorScheme } = useColorScheme();
-  const isDark = colorScheme === 'dark';
-  const { primary } = useAppearance();
-  const ac = primary.hex;
-  const amber = isDark ? '#fbbf24' : '#f59e0b';
-  const fg = isDark ? '#fafafa' : '#0a0a0a';
-  const muted = isDark ? '#a1a1aa' : '#71717a';
+type Colors = { ac: string; fg: string; muted: string; amber: string; danger: string };
+
+/** What each screen is for. Only the screens the signed-in role can open are listed. */
+function UsageTab({ isAdmin, colors }: { isAdmin: boolean; colors: Colors }) {
+  const { ac, fg, danger } = colors;
 
   return (
-    <BottomSheet visible={visible} title="How it works" onClose={onClose}>
+    <>
       <Text variant="muted" className="text-sm leading-5">
-        DynaVolt simulates a single-phase AC supply feeding a load and shows live, meter-style
-        readings. The numbers drift slightly over time, like a real instrument.
+        {isAdmin
+          ? 'You are signed in as a maintenance engineer, so every screen is open to you.'
+          : 'You are signed in as power utility personnel: monitoring and alerts. Logs and settings are for maintenance engineers.'}
+      </Text>
+
+      <View className="gap-3">
+        <SectionTitle>Screens</SectionTitle>
+
+        <IconItem icon={Gauge} color={ac} title="Monitor">
+          The live view. The big number is apparent power in VA, judged against the load
+          threshold. Below it are current, voltage, temperature and humidity, then the metering
+          panel.
+        </IconItem>
+
+        <IconItem icon={Bell} color={danger} title="Alerts">
+          Opens on active alerts only. Acknowledge one to record who responded and how long it
+          took. Switch to All to see acknowledged ones, and filter by kind or search the message.
+        </IconItem>
+
+        {isAdmin ? (
+          <IconItem icon={ChartLine} color={ac} title="Logs">
+            Every stored reading, newest first. Search by status, source, power or date, filter to
+            overloads, and page through. The bar chart shows the daily average load, with the dashed
+            line marking that day's peak.
+          </IconItem>
+        ) : null}
+
+        {isAdmin ? (
+          <IconItem icon={Gear} color={ac} title="Settings">
+            Set the load and temperature thresholds every reading is judged against, and manage the
+            ESP32: its link state, connection history, and the Wi-Fi network it joins.
+          </IconItem>
+        ) : null}
+
+        <IconItem icon={UserCircle} color={ac} title="Profile">
+          Edit your name, change your password, and sign out. Your email and access level are set by
+          an admin.
+        </IconItem>
+      </View>
+
+      <View className="gap-3">
+        <SectionTitle>Alerts</SectionTitle>
+        <IconItem icon={Warning} color={danger} title="When one is raised">
+          Automatically, the moment a reading reaches a threshold. A red dot appears on the Alerts
+          tab while any alert is still unacknowledged.
+        </IconItem>
+        <Text variant="muted" className="text-sm leading-5">
+          {isAdmin
+            ? 'A repeat of the same kind does not stack: while one is unacknowledged, no duplicate is raised. The Logs tab also shows a red dot when new overloads are recorded.'
+            : 'A repeat of the same kind does not stack: while one is unacknowledged, no duplicate is raised.'}
+        </Text>
+      </View>
+
+      <View className="gap-3">
+        <SectionTitle>Controls</SectionTitle>
+        <IconItem icon={Pulse} color={ac} title="Animation (pulse icon)">
+          Pause or resume the waveform animation.
+        </IconItem>
+        <IconItem icon={Palette} color={fg} title="Appearance (palette icon)">
+          Change the AC color, background and accent, or pick a preset.
+        </IconItem>
+        <IconItem icon={Sun} color={fg} title="Theme (sun / moon icon)">
+          Switch between light and dark theme.
+        </IconItem>
+      </View>
+    </>
+  );
+}
+
+/** What each number means, and where it comes from. */
+function ReadingsTab({ colors }: { colors: Colors }) {
+  const { ac, fg, muted, amber, danger } = colors;
+
+  return (
+    <>
+      <Text variant="muted" className="text-sm leading-5">
+        Readings come from an ESP32 on the transformer: a PZEM-004T energy meter for the electrical
+        values and a DHT22 for temperature and humidity. Until the board is wired in, the server
+        simulates them, and they drift slightly over time like a real instrument.
       </Text>
 
       <View className="gap-3">
         <SectionTitle>Readings</SectionTitle>
+
         <IconItem icon={Lightning} color={ac} title="Voltage" unit="unitV" unitColor={fg}>
           Root-mean-square line voltage. Nominal 230 V.
         </IconItem>
@@ -92,21 +182,37 @@ export function InfoModal({ visible, onClose }: { visible: boolean; onClose: () 
             So 230 V RMS peaks at about 325 V.
           </Text>
         </View>
+
         <IconItem icon={PlugsConnected} color={ac} title="Current" unit="unitA" unitColor={fg}>
-          Current the load draws. Near zero when the load is off.
+          Current the load draws.
         </IconItem>
-        <IconItem icon={Gauge} color={ac} title="Power" unit="unitW" unitColor={fg}>
-          Real power delivered to the load.
+
+        <IconItem icon={Gauge} color={ac} title="Apparent power (VA)">
+          Voltage times current. This is the number the load threshold judges, because a 1 KVA
+          transformer is rated in VA, not watts.
+        </IconItem>
+
+        <IconItem icon={Gauge} color={ac} title="Real power" unit="unitW" unitColor={fg}>
+          What the load actually consumes, measured by the meter rather than derived.
         </IconItem>
         <View className="gap-1.5 pl-11">
           <Formula name="power" color={fg} mutedColor={muted} />
           <Text variant="muted" className="text-sm leading-5">
-            The power factor is the cosine of the phase angle between the voltage and current waves
-            (about 0.95 here).
+            The power factor is the cosine of the phase angle between the voltage and current
+            waves. Reactive power is the rest of the triangle: Q = sqrt(S squared minus P squared).
           </Text>
         </View>
+
         <IconItem icon={WaveSine} color={ac} title="Frequency" unit="unitHz" unitColor={fg}>
-          AC cycles per second. Nominal 50 Hz.
+          AC cycles per second. Nominal 60 Hz on the Philippine grid.
+        </IconItem>
+
+        <IconItem icon={Thermometer} color={danger} title="Temperature (C)">
+          Transformer temperature. Its own threshold raises a separate alert from load.
+        </IconItem>
+
+        <IconItem icon={Drop} color={ac} title="Humidity (%)">
+          Ambient humidity, for thermal context alongside temperature.
         </IconItem>
       </View>
 
@@ -121,25 +227,46 @@ export function InfoModal({ visible, onClose }: { visible: boolean; onClose: () 
         <Text variant="muted" className="text-sm leading-5">
           Each sine wave alternates above and below the center (zero) line. That back-and-forth is
           what "alternating current" means. The current wave lags the voltage wave because of the
-          load's power factor. When the load is switched off, the wave flattens to a line.
+          load's power factor. The waveform is an illustration of the live values, not a sampled
+          trace of the actual wave.
         </Text>
       </View>
+    </>
+  );
+}
 
-      <View className="gap-3">
-        <SectionTitle>Controls</SectionTitle>
-        <IconItem icon={Power} color={ac} title="Load switch">
-          Connects or disconnects the load. Off flatlines the wave and drops current to zero.
-        </IconItem>
-        <IconItem icon={Pulse} color={ac} title="Animation (pulse icon)">
-          Pause or resume the waveform animation.
-        </IconItem>
-        <IconItem icon={Palette} color={fg} title="Appearance (palette icon)">
-          Change the AC color, background and accent, or pick a preset.
-        </IconItem>
-        <IconItem icon={Sun} color={fg} title="Theme (sun / moon icon)">
-          Switch between light and dark theme.
-        </IconItem>
-      </View>
+export function InfoModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { colorScheme } = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const { primary } = useAppearance();
+  const { user } = useAuth();
+
+  const [tab, setTab] = useState<Tab>('usage');
+
+  const colors: Colors = {
+    ac: primary.hex,
+    fg: isDark ? '#fafafa' : '#0a0a0a',
+    muted: isDark ? '#a1a1aa' : '#71717a',
+    amber: isDark ? '#fbbf24' : '#f59e0b',
+    danger: isDark ? '#f87171' : '#dc2626',
+  };
+
+  return (
+    <BottomSheet visible={visible} title="How it works" onClose={onClose}>
+      <Segmented
+        className="self-center"
+        options={TABS}
+        value={tab}
+        onChange={setTab}
+        activeColor={colors.ac}
+        inactiveColor={colors.muted}
+      />
+
+      {tab === 'usage' ? (
+        <UsageTab isAdmin={user?.role === 'admin'} colors={colors} />
+      ) : (
+        <ReadingsTab colors={colors} />
+      )}
     </BottomSheet>
   );
 }

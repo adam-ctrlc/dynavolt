@@ -1,7 +1,8 @@
 use sqlx::PgPool;
 
-use crate::alerts::model::{KIND_OVERLOAD, KIND_TEMPERATURE};
+use crate::alerts::model::{Alert, KIND_OVERLOAD, KIND_TEMPERATURE};
 use crate::error::AppResult;
+use crate::notifications;
 use crate::readings::model::Reading;
 use crate::settings::model::Settings;
 
@@ -36,6 +37,9 @@ pub async fn evaluate(pool: &PgPool, reading: &Reading, settings: &Settings) -> 
 
 /// Opens an alert only when nothing of the same kind is still unacknowledged, so a fast
 /// heartbeat cannot flood the alert list with duplicates of one ongoing condition.
+///
+/// The same guard is what keeps push quiet: a device is notified once per condition,
+/// not once per reading for as long as it lasts.
 async fn raise(
     pool: &PgPool,
     reading_id: i64,
@@ -54,19 +58,26 @@ async fn raise(
         return Ok(());
     }
 
-    sqlx::query(
+    let alert = sqlx::query_as::<_, Alert>(
         "insert into alerts (reading_id, kind, message, value, threshold)
-         values ($1, $2, $3, $4, $5)",
+         values ($1, $2, $3, $4, $5)
+         returning id, reading_id, kind, message, value, threshold, created_at,
+                   acknowledged_at, acknowledged_by, response_ms",
     )
     .bind(reading_id)
     .bind(kind)
     .bind(message)
     .bind(value)
     .bind(threshold)
-    .execute(pool)
+    .fetch_one(pool)
     .await?;
 
     tracing::info!(kind, value, threshold, "alert raised");
+
+    // Awaited rather than spawned: a serverless function may be frozen the moment it
+    // responds, which would cut a detached task off mid-flight. This only runs when a
+    // new alert is opened, so it is not on the common path.
+    notifications::service::notify_alert(pool, &alert).await;
 
     Ok(())
 }

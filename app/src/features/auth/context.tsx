@@ -20,6 +20,8 @@ type AuthValue = {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Replaces the cached account after the API returns an updated one. */
+  setUser: (user: User) => void;
 };
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -78,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthValue>(
-    () => ({ token, user, loading, signIn, signOut }),
+    () => ({ token, user, loading, signIn, signOut, setUser }),
     [token, user, loading, signIn, signOut]
   );
 

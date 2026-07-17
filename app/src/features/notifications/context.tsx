@@ -1,7 +1,17 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 
 import * as alertsApi from '@/features/alerts/api';
 import { useAuth } from '@/features/auth/context';
+import { notifyLocally, registerDevice } from '@/features/notifications/push';
 import * as readingsApi from '@/features/readings/api';
 
 const POLL_MS = 5000;
@@ -36,6 +46,16 @@ export function NotificationsProvider({
   const [activeAlerts, setActiveAlerts] = useState(0);
   const [overloadTotal, setOverloadTotal] = useState<number | null>(null);
   const [seenOverloads, setSeenOverloads] = useState<number | null>(null);
+  /** Null until the first poll, so opening the app never announces old alerts. */
+  const lastCount = useRef<number | null>(null);
+
+  // Remote push covers a closed app, but only from a development build. This is what
+  // makes an alert visible in Expo Go, and it costs nothing where push also works.
+  useEffect(() => {
+    if (!token) return;
+
+    void registerDevice(token);
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -46,7 +66,21 @@ export function NotificationsProvider({
     async function tick() {
       try {
         const count = await alertsApi.activeCount(token ?? '', controller.signal);
-        if (active) setActiveAlerts(count);
+        if (!active) return;
+
+        // Only a rise means something new opened. Acknowledging lowers the count and
+        // must stay silent.
+        if (lastCount.current !== null && count > lastCount.current) {
+          const raised = count - lastCount.current;
+          void notifyLocally(
+            raised === 1 ? 'Transformer alert' : `${raised} transformer alerts`,
+            raised === 1
+              ? 'A reading crossed a threshold. Open DynaVolt to acknowledge it.'
+              : 'Readings crossed the thresholds. Open DynaVolt to acknowledge them.'
+          );
+        }
+        lastCount.current = count;
+        setActiveAlerts(count);
 
         if (!watchLogs) return;
 

@@ -25,7 +25,9 @@ export function MetricCard({
 }: MetricCardProps) {
   return (
     <Card className={cn('py-0', className)}>
-      <CardContent className="items-center gap-1 p-2.5">
+      {/* Horizontal padding is tight on purpose: four cards share the row, so the
+          value needs the width more than the card needs the breathing room. */}
+      <CardContent className="items-center gap-1 px-1 py-2.5">
         <View className="flex-row items-center gap-1">
           <IconComponent size={12} color={iconColor} weight="bold" />
           <Text variant="muted" className="text-[10px] uppercase tracking-wide">

@@ -105,10 +105,13 @@ pub struct LiveReading {
     pub voltage_v: f64,
     pub current_a: f64,
     pub temperature_c: f64,
+    /// Derived from `temperature_c` on the way out; never stored, so the two cannot drift.
+    pub temperature_f: f64,
     pub apparent_power_va: f64,
     pub status: Status,
     pub load_threshold_va: f64,
     pub temp_threshold_c: f64,
+    pub temp_threshold_f: f64,
     pub load_percent: f64,
     pub over_temperature: bool,
     pub power_w: Option<f64>,

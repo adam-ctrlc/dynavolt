@@ -91,6 +91,12 @@ export function PowerPanel({ data, accent }: PowerPanelProps) {
           <Stat label="Frequency" value={reading(data?.frequencyHz, 2)} unit="Hz" hint="Grid" />
           <Stat label="Energy" value={reading(data?.energyKwh, 1)} unit="kWh" hint="Meter total" />
           <Stat
+            label="Temperature"
+            value={reading(data?.temperatureF, 1)}
+            unit="°F"
+            hint={data ? `${data.temperatureC.toFixed(1)} °C` : 'Same reading'}
+          />
+          <Stat
             label="Headroom"
             value={headroom === null ? '--' : Math.abs(headroom).toFixed(0)}
             unit="VA"

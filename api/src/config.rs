@@ -1,5 +1,12 @@
 use crate::error::{AppError, AppResult};
 
+/// How often a reading is written to storage.
+///
+/// Not how often the dashboard updates: that polls every second and stays live.
+/// A transformer's thermal behaviour moves over minutes, so storing every 1.5s
+/// bought no insight and filled the database roughly ten times faster.
+const DEFAULT_SAMPLE_INTERVAL_MS: i64 = 15_000;
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
@@ -29,7 +36,7 @@ impl Config {
             jwt_secret: required("JWT_SECRET")?,
             port: parsed("PORT", 8080)?,
             simulator_enabled: parsed("SIMULATOR_ENABLED", true)?,
-            sample_interval_ms: parsed("SAMPLE_INTERVAL_MS", 1500)?,
+            sample_interval_ms: parsed("SAMPLE_INTERVAL_MS", DEFAULT_SAMPLE_INTERVAL_MS)?,
         })
     }
 }

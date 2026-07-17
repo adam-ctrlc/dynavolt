@@ -3,11 +3,15 @@ import { useColorScheme } from 'nativewind';
 import Envelope from 'phosphor-react-native/src/icons/Envelope';
 import Eye from 'phosphor-react-native/src/icons/Eye';
 import EyeSlash from 'phosphor-react-native/src/icons/EyeSlash';
+import Info from 'phosphor-react-native/src/icons/Info';
 import Lock from 'phosphor-react-native/src/icons/Lock';
+import Palette from 'phosphor-react-native/src/icons/Palette';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AboutModal } from '@/components/about-modal';
+import { AppearanceModal } from '@/components/appearance-modal';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,13 +24,17 @@ export default function LoginScreen() {
   const { token, signIn } = useAuth();
   const { primary } = useAppearance();
   const { colorScheme } = useColorScheme();
-  const muted = colorScheme === 'dark' ? '#a1a1aa' : '#71717a';
+  const isDark = colorScheme === 'dark';
+  const muted = isDark ? '#a1a1aa' : '#71717a';
+  const fg = isDark ? '#fafafa' : '#0a0a0a';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reveal, setReveal] = useState(false);
+  const [showAppearance, setShowAppearance] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const scroller = useRef<ScrollView>(null);
 
   /**
@@ -69,7 +77,23 @@ export default function LoginScreen() {
           contentContainerClassName="grow justify-center gap-6 p-6"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <View className="items-end">
+          <View className="flex-row items-center justify-end">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              accessibilityLabel="About DynaVolt"
+              onPress={() => setShowAbout(true)}>
+              <Info size={16} weight="bold" color={fg} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              accessibilityLabel="Appearance"
+              onPress={() => setShowAppearance(true)}>
+              <Palette size={16} weight="bold" color={fg} />
+            </Button>
             <ThemeToggle />
           </View>
 
@@ -144,6 +168,9 @@ export default function LoginScreen() {
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <AppearanceModal visible={showAppearance} onClose={() => setShowAppearance(false)} />
+      <AboutModal visible={showAbout} onClose={() => setShowAbout(false)} />
     </SafeAreaView>
   );
 }

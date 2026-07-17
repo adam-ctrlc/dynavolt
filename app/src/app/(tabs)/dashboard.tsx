@@ -1,7 +1,10 @@
 import { useColorScheme } from 'nativewind';
 import Drop from 'phosphor-react-native/src/icons/Drop';
+import Info from 'phosphor-react-native/src/icons/Info';
 import Lightning from 'phosphor-react-native/src/icons/Lightning';
+import Palette from 'phosphor-react-native/src/icons/Palette';
 import PlugsConnected from 'phosphor-react-native/src/icons/PlugsConnected';
+import Pulse from 'phosphor-react-native/src/icons/Pulse';
 import SignOut from 'phosphor-react-native/src/icons/SignOut';
 import Thermometer from 'phosphor-react-native/src/icons/Thermometer';
 import { useCallback, useState } from 'react';
@@ -35,9 +38,11 @@ export default function DashboardScreen() {
   const amber = isDark ? '#fbbf24' : '#f59e0b';
   const danger = isDark ? '#f87171' : '#dc2626';
   const fg = isDark ? '#fafafa' : '#0a0a0a';
+  const muted = isDark ? '#a1a1aa' : '#71717a';
 
   const [showAppearance, setShowAppearance] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [animate, setAnimate] = useState(true);
 
   const fetcher = useCallback(
     (signal: AbortSignal) => readings.latest(token ?? '', signal),
@@ -56,13 +61,39 @@ export default function DashboardScreen() {
       <ScrollView contentContainerClassName="gap-4 p-4 pb-8">
         <View className="gap-2">
           <View className="flex-row items-center justify-between gap-2">
-            <View className="flex-row items-center gap-2">
-              <Lightning size={16} weight="fill" color={ac} />
-              <Text variant="muted" className="text-[11px] uppercase tracking-wide">
-                Surveillance | 1 KVA Transformer
+            <View className="flex-row items-center gap-1.5">
+              <Lightning size={14} weight="fill" color={ac} />
+              <Text variant="muted" className="text-[10px] uppercase tracking-wide">
+                1 KVA Transformer
               </Text>
             </View>
             <View className="border-border bg-muted/40 dark:bg-input/30 flex-row items-center rounded-full border p-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                accessibilityLabel="How it works"
+                onPress={() => setShowInfo(true)}>
+                <Info size={16} weight="bold" color={fg} />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                accessibilityLabel="Appearance"
+                onPress={() => setShowAppearance(true)}>
+                <Palette size={16} weight="bold" color={fg} />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                accessibilityRole="switch"
+                accessibilityState={{ checked: animate }}
+                accessibilityLabel="Toggle waveform animation"
+                onPress={() => setAnimate((value) => !value)}>
+                <Pulse size={16} weight="bold" color={animate ? ac : muted} />
+              </Button>
               <ThemeToggle />
               <View className="bg-border h-4 w-px" />
               <Button
@@ -109,13 +140,14 @@ export default function DashboardScreen() {
           <CardContent className="pb-0 pt-3" style={{ height: 150 }}>
             <AcWaveform
               energized={Boolean(data)}
+              animated={animate}
               voltageColor={overload ? danger : ac}
               currentColor={amber}
             />
           </CardContent>
         </Card>
 
-        <View className="flex-row gap-3">
+        <View className="flex-row gap-1.5">
           <MetricCard
             className="flex-1"
             icon={PlugsConnected}

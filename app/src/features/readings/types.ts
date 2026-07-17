@@ -13,10 +13,13 @@ export type LiveReading = MeterFields & {
   voltageV: number;
   currentA: number;
   temperatureC: number;
+  /** Derived server-side from temperatureC; never stored. */
+  temperatureF: number;
   apparentPowerVa: number;
   status: Status;
   loadThresholdVa: number;
   tempThresholdC: number;
+  tempThresholdF: number;
   loadPercent: number;
   overTemperature: boolean;
   /** Q = sqrt(S^2 - P^2). Null unless real power was measured. */

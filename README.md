@@ -1,6 +1,6 @@
 # DynaVolt
 
-A Transformer Alert Management System for a 1 KVA distribution transformer, built as a mechanical engineering thesis project at PHINMA Cagayan de Oro College.
+A Transformer Alert Management System for a 1 KVA distribution transformer, built as an electrical engineering thesis project at PHINMA Cagayan de Oro College, Carmen Campus.
 
 An ESP32 measures the transformer's supply and reports it to a Rust API, which stores every sample, raises alerts when a reading crosses a threshold, and serves live readings to an Expo app. Until the hardware is wired in, the API simulates the transformer from the clock so the whole system can be exercised end to end.
 
@@ -61,7 +61,7 @@ DATABASE_URL=postgres://...
 JWT_SECRET=a-long-random-string
 PORT=8080
 SIMULATOR_ENABLED=true
-SAMPLE_INTERVAL_MS=1500
+SAMPLE_INTERVAL_MS=15000
 ```
 
 ```bash
@@ -166,6 +166,9 @@ Apparent power is derived as `S = V * I`. Reactive power is derived from the pow
 ## Notes
 
 - `SIMULATOR_ENABLED=false` makes the API serve the newest stored reading instead of the clock. Flip it once the ESP32 is reporting.
+- `SAMPLE_INTERVAL_MS` throttles writes, not the dashboard: the live view polls every second regardless. It defaults to 15s because a transformer's thermal behaviour moves over minutes, and storing every 1.5s filled the database roughly ten times faster for no extra insight.
+- The database must be reached through a **session** pooler. sqlx names prepared statements per connection, so a transaction pooler multiplexes them onto shared backends and fails with `42P05 ... already exists` on about half of all requests.
+- After changing an environment variable on Vercel, deploy with `--force`. A cached build keeps the old environment and every request fails with `failed to load env vars`.
 - `POST /readings` is currently unauthenticated. It needs a device key before the board is exposed to a real network.
 - The grid here runs at **60 Hz**; the nominal supply is 230 V.
 - Times are stamped in UTC and rendered at UTC+8.

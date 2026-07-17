@@ -6,6 +6,7 @@ use crate::error::AppResult;
 use crate::readings::model;
 use crate::readings::model::{LiveReading, Reading, ReadingInput, Status};
 use crate::readings::simulate;
+use crate::readings::units;
 use crate::settings::model::Settings;
 use crate::settings::service as settings_service;
 
@@ -93,11 +94,14 @@ pub async fn live(
         voltage_v: input.voltage_v,
         current_a: input.current_a,
         temperature_c: input.temperature_c,
+        temperature_f: units::celsius_to_fahrenheit(input.temperature_c),
         apparent_power_va,
         status,
         load_threshold_va: settings.load_threshold_va,
         temp_threshold_c: settings.temp_threshold_c,
+        temp_threshold_f: units::celsius_to_fahrenheit(settings.temp_threshold_c),
         load_percent: apparent_power_va / settings.load_threshold_va * 100.0,
+        // Compared in Celsius, the unit the sensor reports and the threshold is set in.
         over_temperature: input.temperature_c >= settings.temp_threshold_c,
         power_w: input.power_w,
         power_factor: input.power_factor,
