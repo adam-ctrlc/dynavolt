@@ -18,9 +18,22 @@ An AC voltage and load monitor built with Expo and React Native. DynaVolt simula
 - Phosphor icons
 - KaTeX (offline, pre-rendered) for the math
 
+## Project structure
+
+The Expo app lives in the `app/` directory.
+
+```
+app/            Expo application
+  src/app/      Expo Router routes
+  src/components/
+  src/lib/
+  scripts/      build-time asset generation
+```
+
 ## Getting started
 
 ```bash
+cd app
 pnpm install
 pnpm expo start
 ```
@@ -28,6 +41,8 @@ pnpm expo start
 Then open the project in Expo Go (SDK 54) or a development build.
 
 ## Scripts
+
+Run these from the `app/` directory:
 
 - `pnpm expo start` starts the development server
 - `node scripts/build-katex-assets.mjs` regenerates the offline KaTeX assets
