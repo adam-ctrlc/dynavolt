@@ -13,7 +13,7 @@ use std::sync::Arc;
 use axum::Json;
 use axum::Router;
 use axum::routing::get;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
 use tower_http::cors::{Any, CorsLayer};
@@ -23,11 +23,24 @@ use crate::config::Config;
 use crate::error::AppResult;
 use crate::state::AppState;
 
+/// Philippine time (UTC+8). Fixed offset: the country does not observe DST.
+const LOCAL_OFFSET_SECONDS: i32 = 8 * 3600;
+const LOCAL_LABEL_FORMAT: &str = "%B %-d, %Y %-I:%M %p";
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Health {
     pub status: &'static str,
     pub checked_at: DateTime<Utc>,
+    pub checked_at_label: String,
+}
+
+/// Renders the instant in local time for people; `checked_at` stays UTC for machines.
+fn local_label(now: DateTime<Utc>) -> String {
+    FixedOffset::east_opt(LOCAL_OFFSET_SECONDS).map_or_else(
+        || now.format(LOCAL_LABEL_FORMAT).to_string(),
+        |offset| now.with_timezone(&offset).format(LOCAL_LABEL_FORMAT).to_string(),
+    )
 }
 
 /// Production entrypoint. Connects and serves; never migrates or seeds, because
@@ -77,8 +90,11 @@ fn router(pool: PgPool, config: &Config) -> Router {
 }
 
 async fn health() -> Json<Health> {
+    let now = Utc::now();
+
     Json(Health {
         status: "ok",
-        checked_at: Utc::now(),
+        checked_at: now,
+        checked_at_label: local_label(now),
     })
 }
