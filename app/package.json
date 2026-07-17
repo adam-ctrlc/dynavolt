@@ -2,6 +2,7 @@
   "name": "me",
   "main": "expo-router/entry",
   "version": "1.0.0",
+  "license": "Apache-2.0",
   "dependencies": {
     "@react-navigation/native": "^7.3.8",
     "@rn-primitives/portal": "^1.5.2",
