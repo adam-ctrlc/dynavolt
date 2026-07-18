@@ -242,6 +242,11 @@ export function InfoModal({ visible, onClose }: { visible: boolean; onClose: () 
   const { user } = useAuth();
 
   const [tab, setTab] = useState<Tab>('usage');
+  // The readings tab holds KaTeX WebViews, which are expensive to mount. Once shown,
+  // it is kept mounted and only hidden, so switching back and forth does not remount
+  // them; it is not mounted at all until first opened, so a viewer who never leaves
+  // the usage tab pays nothing.
+  const [readingsMounted, setReadingsMounted] = useState(false);
 
   const colors: Colors = {
     ac: primary.hex,
@@ -251,22 +256,31 @@ export function InfoModal({ visible, onClose }: { visible: boolean; onClose: () 
     danger: isDark ? '#f87171' : '#dc2626',
   };
 
+  function changeTab(next: Tab) {
+    if (next === 'readings') setReadingsMounted(true);
+    setTab(next);
+  }
+
   return (
     <BottomSheet visible={visible} title="How it works" onClose={onClose}>
       <Segmented
         className="self-center"
         options={TABS}
         value={tab}
-        onChange={setTab}
+        onChange={changeTab}
         activeColor={colors.ac}
         inactiveColor={colors.muted}
       />
 
-      {tab === 'usage' ? (
+      <View style={{ display: tab === 'usage' ? 'flex' : 'none' }} className="gap-5">
         <UsageTab isAdmin={user?.role === 'admin'} colors={colors} />
-      ) : (
-        <ReadingsTab colors={colors} />
-      )}
+      </View>
+
+      {readingsMounted ? (
+        <View style={{ display: tab === 'readings' ? 'flex' : 'none' }} className="gap-5">
+          <ReadingsTab colors={colors} />
+        </View>
+      ) : null}
     </BottomSheet>
   );
 }

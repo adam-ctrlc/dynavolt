@@ -3,16 +3,19 @@ import Bell from 'phosphor-react-native/src/icons/Bell';
 import BellRinging from 'phosphor-react-native/src/icons/BellRinging';
 import FunnelSimple from 'phosphor-react-native/src/icons/FunnelSimple';
 import ListBullets from 'phosphor-react-native/src/icons/ListBullets';
+import MagnifyingGlass from 'phosphor-react-native/src/icons/MagnifyingGlass';
+import ShieldCheck from 'phosphor-react-native/src/icons/ShieldCheck';
 import Thermometer from 'phosphor-react-native/src/icons/Thermometer';
 import Warning from 'phosphor-react-native/src/icons/Warning';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AlertListSkeleton } from '@/components/ac/alert-skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Pager } from '@/components/ui/pager';
 import { SearchField } from '@/components/ui/search-field';
 import { Segmented } from '@/components/ui/segmented';
@@ -62,8 +65,12 @@ export default function AlertsScreen() {
   const [offset, setOffset] = useState(0);
   const [busy, setBusy] = useState<number | null>(null);
   const [nonce, setNonce] = useState(0);
+  // While set, the list is held frozen so a just-acknowledged card shows its
+  // acknowledged state for a beat before the refetch drops it.
+  const [frozen, setFrozen] = useState<Alert[] | null>(null);
 
   const scroller = useRef<ScrollView>(null);
+  const ackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedQuery = useDebounced(query);
 
   // A narrowed result set can be shorter than the current offset, which would
@@ -102,24 +109,42 @@ export default function AlertsScreen() {
     reloadKey: nonce,
   });
 
+  const rows = data?.rows ?? [];
+  // While frozen, render the held snapshot so the acknowledged card stays put.
+  const list = frozen ?? rows;
+  const total = data?.total ?? 0;
+
   async function acknowledge(id: number) {
     setBusy(id);
     try {
-      await alertsApi.acknowledge(token ?? '', id);
-      setNonce((n) => n + 1);
+      const updated = await alertsApi.acknowledge(token ?? '', id);
+      // Swap the acknowledged card in place and hold the list for a moment, so the
+      // "ACKNOWLEDGED" state is visible before the refetch removes it.
+      setFrozen((current) => (current ?? rows).map((a) => (a.id === id ? updated : a)));
+
+      if (ackTimer.current) clearTimeout(ackTimer.current);
+      ackTimer.current = setTimeout(() => {
+        setFrozen(null);
+        setNonce((n) => n + 1);
+      }, 2000);
     } finally {
       setBusy(null);
     }
   }
 
-  const list = data?.rows ?? [];
-  const total = data?.total ?? 0;
+  useEffect(
+    () => () => {
+      if (ackTimer.current) clearTimeout(ackTimer.current);
+    },
+    []
+  );
   const filtering = debouncedQuery.trim().length > 0 || kind !== null;
   // Null data means the first poll has not landed; an empty page is a real empty result.
   const loading = data === null && error === null;
 
   return (
     <SafeAreaView className="bg-background flex-1" edges={['top']}>
+      <KeyboardAvoidingView className="flex-1" behavior="padding">
       <ScrollView
         ref={scroller}
         contentContainerClassName="gap-3 p-4 pb-8"
@@ -172,18 +197,15 @@ export default function AlertsScreen() {
         {loading ? <AlertListSkeleton /> : null}
 
         {!loading && list.length === 0 ? (
-          <Card className="py-0">
-            <CardContent className="items-center gap-1 p-6">
-              <Text className="font-semibold">
-                {filtering ? 'No matching alerts' : `No ${showAll ? '' : 'active '}alerts`}
-              </Text>
-              <Text variant="muted" className="text-center text-sm">
-                {filtering
-                  ? 'Try a different search or kind.'
-                  : 'Conditions are within the configured thresholds.'}
-              </Text>
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={filtering ? MagnifyingGlass : ShieldCheck}
+            title={filtering ? 'No matching alerts' : `No ${showAll ? '' : 'active '}alerts`}
+            description={
+              filtering
+                ? 'Try a different search or kind.'
+                : 'Conditions are within the configured thresholds.'
+            }
+          />
         ) : null}
 
         {(loading ? [] : list).map((alert) => {
@@ -192,51 +214,54 @@ export default function AlertsScreen() {
 
           return (
             <Card key={alert.id} className="py-0">
-              <CardContent className="gap-2 p-4">
-                <View className="flex-row items-center gap-2">
-                  <View
-                    className="h-8 w-8 items-center justify-center rounded-full"
-                    style={{ backgroundColor: `${accent}1f` }}>
+              <CardContent className="gap-2 p-3">
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center gap-1.5">
                     {alert.kind === 'temperature' ? (
-                      <Thermometer size={16} weight="bold" color={accent} />
+                      <Thermometer size={14} weight="bold" color={accent} />
                     ) : (
-                      <Warning size={16} weight="bold" color={accent} />
+                      <Warning size={14} weight="bold" color={accent} />
                     )}
-                  </View>
-                  <View className="flex-1 gap-0.5">
-                    <Text className="font-semibold capitalize leading-none">{alert.kind}</Text>
-                    <Text variant="muted" className="text-xs">
-                      {formatDateTime(alert.createdAt)}
+                    <Text className="text-sm font-semibold capitalize leading-none">
+                      {alert.kind}
                     </Text>
                   </View>
                   <Badge variant={open ? 'destructive' : 'secondary'}>
-                    <Text>{open ? 'ACTIVE' : 'ACKNOWLEDGED'}</Text>
+                    <Text className="text-[10px]">{open ? 'ACTIVE' : 'ACKNOWLEDGED'}</Text>
                   </Badge>
                 </View>
 
                 <View className="flex-row items-baseline gap-1.5">
-                  <Text className="text-2xl font-bold leading-none" style={{ color: accent }}>
+                  <Text className="text-lg font-bold leading-none" style={{ color: accent }}>
                     {alert.value.toFixed(1)}
                   </Text>
-                  <Text variant="muted" className="text-xs">
+                  <Text variant="muted" className="text-[10px]">
                     vs {alert.threshold} threshold
                   </Text>
                 </View>
 
-                <Text variant="muted" className="text-sm">
+                <Text variant="muted" className="text-xs">
                   {alert.message}
                 </Text>
 
-                {open ? (
-                  <Button size="sm" disabled={busy === alert.id} onPress={() => void acknowledge(alert.id)}>
-                    <Text>{busy === alert.id ? 'Acknowledging...' : 'Acknowledge alert'}</Text>
-                  </Button>
-                ) : (
-                  <Text variant="muted" className="text-xs">
-                    Responded in{' '}
-                    {alert.responseMs === null ? '--' : `${(alert.responseMs / 1000).toFixed(1)}s`}
+                <View className="flex-row items-center justify-between gap-2">
+                  <Text variant="muted" className="flex-1 text-[10px]">
+                    {open
+                      ? formatDateTime(alert.createdAt)
+                      : `Responded in ${alert.responseMs === null ? '--' : `${(alert.responseMs / 1000).toFixed(1)}s`}`}
                   </Text>
-                )}
+                  {open ? (
+                    <Button
+                      size="sm"
+                      className="h-8"
+                      disabled={busy === alert.id}
+                      onPress={() => void acknowledge(alert.id)}>
+                      <Text className="text-xs">
+                        {busy === alert.id ? 'Acknowledging...' : 'Acknowledge'}
+                      </Text>
+                    </Button>
+                  ) : null}
+                </View>
               </CardContent>
             </Card>
           );
@@ -249,9 +274,13 @@ export default function AlertsScreen() {
             offset={offset}
             onOffsetChange={goToPage}
             noun="alert"
+            onInputFocus={() =>
+              setTimeout(() => scroller.current?.scrollToEnd({ animated: true }), 150)
+            }
           />
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

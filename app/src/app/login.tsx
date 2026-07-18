@@ -43,7 +43,7 @@ export default function LoginScreen() {
   const muted = isDark ? '#a1a1aa' : '#71717a';
   const fg = isDark ? '#fafafa' : '#0a0a0a';
 
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('user');
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +70,7 @@ export default function LoginScreen() {
     setBusy(true);
     setError(null);
     try {
-      await signIn(email.trim(), password, role);
+      await signIn(identifier.trim(), password, role);
     } catch (caught) {
       setError((caught as Error).message);
     } finally {
@@ -78,7 +78,7 @@ export default function LoginScreen() {
     }
   }
 
-  const canSubmit = email.trim().length > 0 && password.length > 0 && !busy;
+  const canSubmit = identifier.trim().length > 0 && password.length > 0 && !busy;
 
   return (
     <SafeAreaView className="bg-background flex-1" edges={['top', 'bottom']}>
@@ -148,17 +148,16 @@ export default function LoginScreen() {
               </View>
 
               <View className="gap-1.5">
-                <Text className="text-sm font-medium">Email</Text>
+                <Text className="text-sm font-medium">Email or username</Text>
                 <IconInput
                   icon={Envelope}
                   iconColor={primary.hex}
-                  value={email}
-                  onChangeText={setEmail}
+                  value={identifier}
+                  onChangeText={setIdentifier}
                   onFocus={liftIntoView}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  autoComplete="email"
-                  keyboardType="email-address"
+                  autoComplete="username"
                   returnKeyType="next"
                   placeholder="you@example.com"
                 />

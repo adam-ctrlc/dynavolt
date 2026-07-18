@@ -13,7 +13,7 @@ pub async fn evaluate(pool: &PgPool, reading: &Reading, settings: &Settings) -> 
             pool,
             reading.id,
             KIND_OVERLOAD,
-            &format!("load reached {:.0} VA", reading.apparent_power_va),
+            &format!("Load reached {:.0} VA", reading.apparent_power_va),
             reading.apparent_power_va,
             settings.load_threshold_va,
         )
@@ -25,7 +25,7 @@ pub async fn evaluate(pool: &PgPool, reading: &Reading, settings: &Settings) -> 
             pool,
             reading.id,
             KIND_TEMPERATURE,
-            &format!("temperature reached {:.1} °C", reading.temperature_c),
+            &format!("Temperature reached {:.1} °C", reading.temperature_c),
             reading.temperature_c,
             settings.temp_threshold_c,
         )

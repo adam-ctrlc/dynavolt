@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { IconInput } from '@/components/ui/icon-input';
+import { Pager } from '@/components/ui/pager';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/features/auth/context';
@@ -26,6 +27,7 @@ import { formatShortDateTime } from '@/lib/datetime';
 
 const ON_PRIMARY = '#ffffff';
 const STATUS_POLL_MS = 5000;
+const HISTORY_PAGE = 5;
 
 function uptimeLabel(seconds: number | null): string {
   if (seconds === null) return '--';
@@ -65,6 +67,7 @@ export function DeviceCard() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [historyOffset, setHistoryOffset] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -306,50 +309,68 @@ export function DeviceCard() {
         </CardContent>
       </Card>
 
-      <Card className="gap-0 py-0">
-        <CardHeader className="border-border p-4">
-          <CardTitle className="text-base">Connection history</CardTitle>
+      <View className="gap-2">
+        <View className="gap-0.5">
+          <Text className="text-base font-semibold">Connection history</Text>
           <Text variant="muted" className="text-xs">
             Recent link events reported by the board.
           </Text>
-        </CardHeader>
+        </View>
 
-        <CardContent className="gap-0 p-0">
-          {loading ? (
-            <View className="gap-3 p-4">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </View>
-          ) : (
-            history.map((event, index) => {
+        {loading
+          ? [0, 1, 2].map((row) => (
+              <Card key={row} className="py-0">
+                <CardContent className="gap-1.5 p-3">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-44" />
+                </CardContent>
+              </Card>
+            ))
+          : history.slice(historyOffset, historyOffset + HISTORY_PAGE).map((event) => {
               const up = event.kind === 'connected';
               const color = up ? primary.hex : danger;
 
               return (
-                <View
-                  key={event.id}
-                  className={index === 0 ? 'flex-row items-center gap-3 p-4' : 'border-border flex-row items-center gap-3 border-t p-4'}>
-                  {up ? (
-                    <CheckCircle size={16} weight="fill" color={color} />
-                  ) : (
-                    <WarningCircle size={16} weight="fill" color={color} />
-                  )}
-                  <View className="flex-1 gap-0.5">
-                    <Text className="text-xs font-semibold capitalize">{event.kind}</Text>
-                    <Text variant="muted" className="text-[10px]">
-                      {event.detail} | {event.ssid}
-                    </Text>
-                  </View>
-                  <Text variant="muted" className="text-[10px]">
-                    {formatShortDateTime(event.at)}
-                  </Text>
-                </View>
+                <Card key={event.id} className="py-0">
+                  <CardContent className="gap-1.5 p-3">
+                    <View className="flex-row items-center justify-between">
+                      <View className="flex-row items-center gap-1.5">
+                        {up ? (
+                          <CheckCircle size={14} weight="fill" color={color} />
+                        ) : (
+                          <WarningCircle size={14} weight="fill" color={color} />
+                        )}
+                        <Text className="text-sm font-semibold capitalize leading-none">
+                          {event.kind}
+                        </Text>
+                      </View>
+                      <Text variant="muted" className="text-[10px]">
+                        {formatShortDateTime(event.at)}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center justify-between gap-2">
+                      <Text variant="muted" className="flex-1 text-[10px]">
+                        {event.detail}
+                      </Text>
+                      <Text variant="muted" className="text-[10px]">
+                        {event.ssid}
+                      </Text>
+                    </View>
+                  </CardContent>
+                </Card>
               );
-            })
-          )}
-        </CardContent>
-      </Card>
+            })}
+
+        {!loading ? (
+          <Pager
+            total={history.length}
+            limit={HISTORY_PAGE}
+            offset={historyOffset}
+            onOffsetChange={setHistoryOffset}
+            noun="event"
+          />
+        ) : null}
+      </View>
     </View>
   );
 }

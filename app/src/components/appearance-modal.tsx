@@ -1,5 +1,5 @@
 import { useColorScheme } from 'nativewind';
-import { useState, type ReactNode } from 'react';
+import { memo, useState, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
@@ -9,25 +9,32 @@ import { Text } from '@/components/ui/text';
 import { AC_COLORS, ACCENTS, BACKGROUNDS, PRESETS, useAppearance, type Preset } from '@/lib/appearance';
 import { cn } from '@/lib/utils';
 
-function Swatch({
-  color,
-  selected,
-  onPress,
-}: {
-  color: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      className={cn('rounded-full border-2 p-0.5', selected ? 'border-primary' : 'border-transparent')}>
-      <View className="h-8 w-8 rounded-full border border-black/10" style={{ backgroundColor: color }} />
-    </Pressable>
-  );
-}
+// Memoised, and the comparison ignores onPress: a fresh onPress closure every render
+// would otherwise defeat memo, and the closure only ever calls a stable setter with a
+// fixed item, so the stale one is fine. So a swatch re-renders only when it is
+// selected or deselected, not on every appearance change.
+const Swatch = memo(
+  function Swatch({
+    color,
+    selected,
+    onPress,
+  }: {
+    color: string;
+    selected: boolean;
+    onPress: () => void;
+  }) {
+    return (
+      <Pressable
+        onPress={onPress}
+        className={cn('rounded-full border-2 p-0.5', selected ? 'border-primary' : 'border-transparent')}>
+        <View className="h-8 w-8 rounded-full border border-black/10" style={{ backgroundColor: color }} />
+      </Pressable>
+    );
+  },
+  (a, b) => a.color === b.color && a.selected === b.selected
+);
 
-function PresetChip({
+const PresetChip = memo(function PresetChip({
   preset,
   isDark,
   selected,
@@ -43,7 +50,11 @@ function PresetChip({
   const id = `preset-${preset.label}`;
   return (
     <Pressable onPress={onPress} className="flex-1 gap-1">
-      <View className={cn('rounded-[11px] p-0.5', selected ? 'bg-primary' : 'bg-transparent')}>
+      <View
+        className={cn(
+          'rounded-[11px] border-2 p-0.5',
+          selected ? 'border-primary' : 'border-transparent'
+        )}>
         <View
           className="h-10 w-full overflow-hidden rounded-lg border border-border"
           onLayout={(e) => setW(e.nativeEvent.layout.width)}>
@@ -66,7 +77,8 @@ function PresetChip({
       </Text>
     </Pressable>
   );
-}
+},
+(a, b) => a.preset === b.preset && a.isDark === b.isDark && a.selected === b.selected);
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (

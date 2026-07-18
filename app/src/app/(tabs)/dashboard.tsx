@@ -15,6 +15,7 @@ import { MetricCard } from '@/components/ac/metric-card';
 import { PowerPanel } from '@/components/ac/power-panel';
 import { AcWaveform } from '@/components/ac/waveform';
 import { AppearanceModal } from '@/components/appearance-modal';
+import { ConfirmModal } from '@/components/confirm-modal';
 import { InfoModal } from '@/components/info-modal';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +43,7 @@ export default function DashboardScreen() {
 
   const [showAppearance, setShowAppearance] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [showSignOut, setShowSignOut] = useState(false);
   const [animate, setAnimate] = useState(true);
 
   const fetcher = useCallback(
@@ -101,7 +103,7 @@ export default function DashboardScreen() {
                 size="icon"
                 className="h-8 w-8 rounded-full"
                 accessibilityLabel="Sign out"
-                onPress={() => void signOut()}>
+                onPress={() => setShowSignOut(true)}>
                 <SignOut size={16} weight="bold" color={fg} />
               </Button>
             </View>
@@ -182,17 +184,27 @@ export default function DashboardScreen() {
           />
         </View>
 
-        <PowerPanel data={data} accent={ac} />
-
         {hot ? (
-          <Card className="border-destructive py-0">
-            <CardContent className="p-3">
-              <Text className="text-destructive text-sm font-semibold">
-                Temperature above {data?.tempThresholdC} °C
+          <View
+            className="flex-row items-center gap-3 rounded-xl border p-3"
+            style={{ borderColor: `${danger}40`, backgroundColor: `${danger}14` }}>
+            <View
+              className="h-9 w-9 items-center justify-center rounded-full"
+              style={{ backgroundColor: `${danger}26` }}>
+              <Thermometer size={18} weight="fill" color={danger} />
+            </View>
+            <View className="flex-1 gap-0.5">
+              <Text className="text-sm font-semibold" style={{ color: danger }}>
+                Temperature warning
               </Text>
-            </CardContent>
-          </Card>
+              <Text variant="muted" className="text-xs">
+                {data ? `${data.temperatureC.toFixed(1)} °C is above the ${data.tempThresholdC} °C threshold.` : ''}
+              </Text>
+            </View>
+          </View>
         ) : null}
+
+        <PowerPanel data={data} accent={ac} />
 
         {error ? (
           <Card className="py-0">
@@ -209,6 +221,18 @@ export default function DashboardScreen() {
 
       <AppearanceModal visible={showAppearance} onClose={() => setShowAppearance(false)} />
       <InfoModal visible={showInfo} onClose={() => setShowInfo(false)} />
+      <ConfirmModal
+        visible={showSignOut}
+        title="Sign out?"
+        message="You will need your email and password to sign back in."
+        confirmLabel="Sign out"
+        destructive
+        onConfirm={() => {
+          setShowSignOut(false);
+          void signOut();
+        }}
+        onClose={() => setShowSignOut(false)}
+      />
     </SafeAreaView>
   );
 }

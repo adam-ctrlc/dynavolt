@@ -1,4 +1,5 @@
 import { useColorScheme } from 'nativewind';
+import At from 'phosphor-react-native/src/icons/At';
 import Check from 'phosphor-react-native/src/icons/Check';
 import Envelope from 'phosphor-react-native/src/icons/Envelope';
 import Eye from 'phosphor-react-native/src/icons/Eye';
@@ -16,6 +17,7 @@ import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppearanceModal } from '@/components/appearance-modal';
+import { ConfirmModal } from '@/components/confirm-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -210,6 +212,7 @@ export default function ProfileScreen() {
   const danger = colorScheme === 'dark' ? '#f87171' : '#dc2626';
 
   const [showAppearance, setShowAppearance] = useState(false);
+  const [showSignOut, setShowSignOut] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<NameDraft>(draftOf(user));
   const [busy, setBusy] = useState(false);
@@ -311,6 +314,15 @@ export default function ProfileScreen() {
               />
             </Field>
 
+            <Field label="Username" hint="Not editable">
+              <IconInput
+                icon={At}
+                iconColor={primary.hex}
+                value={user?.username ?? ''}
+                editable={false}
+              />
+            </Field>
+
             <Field label="First name">
               <IconInput
                 icon={IdentificationCard}
@@ -388,7 +400,7 @@ export default function ProfileScreen() {
           </CardContent>
         </Card>
 
-        <Button variant="outline" onPress={() => void signOut()}>
+        <Button variant="outline" onPress={() => setShowSignOut(true)}>
           <SignOut size={16} weight="bold" color={danger} />
           <Text style={{ color: danger }}>Sign out</Text>
         </Button>
@@ -399,6 +411,18 @@ export default function ProfileScreen() {
       </ScrollView>
 
       <AppearanceModal visible={showAppearance} onClose={() => setShowAppearance(false)} />
+      <ConfirmModal
+        visible={showSignOut}
+        title="Sign out?"
+        message="You will need your email and password to sign back in."
+        confirmLabel="Sign out"
+        destructive
+        onConfirm={() => {
+          setShowSignOut(false);
+          void signOut();
+        }}
+        onClose={() => setShowSignOut(false)}
+      />
     </SafeAreaView>
   );
 }

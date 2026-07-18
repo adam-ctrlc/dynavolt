@@ -1,24 +1,35 @@
 import { Redirect, router } from 'expo-router';
 import { useColorScheme } from 'nativewind';
+import At from 'phosphor-react-native/src/icons/At';
 import CaretLeft from 'phosphor-react-native/src/icons/CaretLeft';
 import Check from 'phosphor-react-native/src/icons/Check';
 import Envelope from 'phosphor-react-native/src/icons/Envelope';
 import Eye from 'phosphor-react-native/src/icons/Eye';
 import EyeSlash from 'phosphor-react-native/src/icons/EyeSlash';
+import FunnelSimple from 'phosphor-react-native/src/icons/FunnelSimple';
+import HardHat from 'phosphor-react-native/src/icons/HardHat';
 import IdentificationCard from 'phosphor-react-native/src/icons/IdentificationCard';
 import Lock from 'phosphor-react-native/src/icons/Lock';
+import Sparkle from 'phosphor-react-native/src/icons/Sparkle';
 import Trash from 'phosphor-react-native/src/icons/Trash';
 import UserPlus from 'phosphor-react-native/src/icons/UserPlus';
+import MagnifyingGlass from 'phosphor-react-native/src/icons/MagnifyingGlass';
 import Users from 'phosphor-react-native/src/icons/Users';
+import UsersThree from 'phosphor-react-native/src/icons/UsersThree';
+import Wrench from 'phosphor-react-native/src/icons/Wrench';
 import X from 'phosphor-react-native/src/icons/X';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { BottomSheet } from '@/components/bottom-sheet';
+import { ConfirmModal } from '@/components/confirm-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardTitle } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { IconInput } from '@/components/ui/icon-input';
+import { SearchField } from '@/components/ui/search-field';
 import { Segmented } from '@/components/ui/segmented';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
@@ -26,6 +37,7 @@ import { useAuth } from '@/features/auth/context';
 import type { Role } from '@/features/auth/types';
 import * as usersApi from '@/features/users/api';
 import type { ManagedUser } from '@/features/users/types';
+import { useDebounced } from '@/hooks/use-debounced';
 import { useAppearance } from '@/lib/appearance';
 import { formatDateTime } from '@/lib/datetime';
 
@@ -38,10 +50,19 @@ const ROLES: { label: string; value: Role }[] = [
   { label: 'Admin', value: 'admin' },
 ];
 
+const ROLE_FILTERS: { label: string; value: Role | null; icon: typeof Wrench }[] = [
+  { label: 'All roles', value: null, icon: FunnelSimple },
+  // Same icons as the login role picker: Wrench for the maintenance engineer, HardHat
+  // for the power utility personnel.
+  { label: 'Admins', value: 'admin', icon: Wrench },
+  { label: 'Users', value: 'user', icon: HardHat },
+];
+
 type Draft = {
   firstName: string;
   middleName: string;
   lastName: string;
+  username: string;
   email: string;
   password: string;
   role: Role;
@@ -51,6 +72,7 @@ const EMPTY: Draft = {
   firstName: '',
   middleName: '',
   lastName: '',
+  username: '',
   email: '',
   password: '',
   role: 'user',
@@ -87,20 +109,27 @@ export default function UsersScreen() {
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<Role | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ManagedUser | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const debouncedQuery = useDebounced(query);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setRows(await usersApi.list(token ?? ''));
+      setRows(await usersApi.list(token ?? '', { q: debouncedQuery, role: roleFilter ?? undefined }));
       setError(null);
     } catch (caught) {
       setError((caught as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, debouncedQuery, roleFilter]);
 
   useEffect(() => {
     void refresh();
@@ -111,6 +140,27 @@ export default function UsersScreen() {
     setAdding(false);
     setReveal(false);
     setError(null);
+  }
+
+  async function generateUsername() {
+    if (!draft.firstName.trim() || !draft.lastName.trim()) {
+      setError('Enter a first and last name before generating a username.');
+      return;
+    }
+    setGenerating(true);
+    setError(null);
+    try {
+      const { username } = await usersApi.suggestUsername(
+        token ?? '',
+        draft.firstName.trim(),
+        draft.lastName.trim()
+      );
+      setDraft((p) => ({ ...p, username }));
+    } catch (caught) {
+      setError((caught as Error).message);
+    } finally {
+      setGenerating(false);
+    }
   }
 
   async function save() {
@@ -125,6 +175,8 @@ export default function UsersScreen() {
         firstName: draft.firstName.trim(),
         middleName: draft.middleName.trim() || null,
         lastName: draft.lastName.trim(),
+        // Blank lets the server's formula generate one.
+        username: draft.username.trim() || undefined,
       });
       cancel();
       setStatus(`Account created for ${draft.email.trim()}`);
@@ -136,31 +188,21 @@ export default function UsersScreen() {
     }
   }
 
-  /** Deleting an account cannot be undone, so it asks first and names the person. */
-  function confirmRemove(target: ManagedUser) {
-    Alert.alert(
-      'Delete account?',
-      `${target.fullName || target.email} will lose access immediately. This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => void remove(target),
-        },
-      ]
-    );
-  }
-
-  async function remove(target: ManagedUser) {
+  async function remove() {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    setDeleting(true);
     setError(null);
     setStatus(null);
     try {
       await usersApi.remove(token ?? '', target.id);
       setStatus(`Deleted ${target.fullName || target.email}`);
+      setPendingDelete(null);
       await refresh();
     } catch (caught) {
       setError((caught as Error).message);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -192,25 +234,24 @@ export default function UsersScreen() {
           <Text className="text-lg font-bold">User Management</Text>
         </View>
 
-        <Card className="gap-0 py-0">
-          <CardHeader className="border-border flex-row items-center justify-between border-b p-4">
+        <Card className="py-0">
+          <CardContent className="flex-row items-center justify-between p-4">
             <View className="flex-1 gap-0.5">
               <CardTitle className="text-base">Add an account</CardTitle>
               <Text variant="muted" className="text-xs">
                 The role decides what they can reach.
               </Text>
             </View>
-            {adding ? null : (
-              <Button variant="outline" size="sm" onPress={() => setAdding(true)}>
-                <UserPlus size={14} weight="bold" color={primary.hex} />
-                <Text>New</Text>
-              </Button>
-            )}
-          </CardHeader>
+            <Button variant="outline" size="sm" onPress={() => setAdding(true)}>
+              <UserPlus size={14} weight="bold" color={primary.hex} />
+              <Text>New</Text>
+            </Button>
+          </CardContent>
+        </Card>
 
-          {adding ? (
-            <CardContent className="gap-4 p-4">
-              <Field label="First name">
+        <BottomSheet visible={adding} title="Add an account" onClose={cancel}>
+          <View className="gap-4">
+            <Field label="First name">
                 <IconInput
                   icon={IdentificationCard}
                   iconColor={primary.hex}
@@ -238,6 +279,30 @@ export default function UsersScreen() {
                   onChangeText={(lastName) => setDraft((p) => ({ ...p, lastName }))}
                   placeholder="Santos"
                 />
+              </Field>
+
+              <Field label="Username" hint="Leave blank to auto-generate">
+                <View className="flex-row items-center gap-2">
+                  <IconInput
+                    containerClassName="flex-1"
+                    icon={At}
+                    iconColor={primary.hex}
+                    value={draft.username}
+                    onChangeText={(username) => setDraft((p) => ({ ...p, username }))}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder="Generated from the name"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-11"
+                    disabled={generating}
+                    onPress={() => void generateUsername()}>
+                    <Sparkle size={14} weight="bold" color={primary.hex} />
+                    <Text>{generating ? '...' : 'Generate'}</Text>
+                  </Button>
+                </View>
               </Field>
 
               <Field label="Email">
@@ -294,20 +359,52 @@ export default function UsersScreen() {
                   <Text numberOfLines={1}>{busy ? 'Saving...' : 'Create'}</Text>
                 </Button>
               </View>
-            </CardContent>
-          ) : null}
-        </Card>
+          </View>
+        </BottomSheet>
 
         {error && !adding ? <Text className="text-destructive text-sm">{error}</Text> : null}
         {status ? <Text className="text-primary text-sm">{status}</Text> : null}
+
+        <SearchField value={query} onChangeText={setQuery} placeholder="Search accounts..." />
+
+        <View className="flex-row items-center gap-2">
+          {ROLE_FILTERS.map((option) => {
+            const selected = roleFilter === option.value;
+            const Icon = option.icon;
+            return (
+              <Button
+                key={option.label}
+                variant={selected ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1 px-1"
+                onPress={() => setRoleFilter(option.value)}>
+                <Icon size={14} weight="bold" color={selected ? ON_PRIMARY : muted} />
+                <Text className="text-xs">{option.label}</Text>
+              </Button>
+            );
+          })}
+        </View>
 
         {loading ? (
           <Skeleton className="h-3 w-24" />
         ) : (
           <Text variant="muted" className="text-xs">
             {rows.length} account{rows.length === 1 ? '' : 's'}
+            {debouncedQuery.trim() || roleFilter ? ' matching filters' : ''}
           </Text>
         )}
+
+        {!loading && rows.length === 0 ? (
+          <EmptyState
+            icon={debouncedQuery.trim() || roleFilter ? MagnifyingGlass : UsersThree}
+            title={debouncedQuery.trim() || roleFilter ? 'No matching accounts' : 'No accounts yet'}
+            description={
+              debouncedQuery.trim() || roleFilter
+                ? 'Try a different search or role.'
+                : 'Add an account to get started.'
+            }
+          />
+        ) : null}
 
         {loading
           ? [0, 1, 2].map((row) => (
@@ -327,9 +424,14 @@ export default function UsersScreen() {
                   <CardContent className="gap-2 p-4">
                     <View className="flex-row items-center gap-2">
                       <View className="flex-1 gap-0.5">
-                        <Text className="font-semibold leading-tight">
-                          {row.fullName || row.email}
-                        </Text>
+                        <View className="flex-row items-baseline gap-1.5">
+                          <Text className="font-semibold leading-tight">
+                            {row.fullName || row.email}
+                          </Text>
+                          <Text variant="muted" className="text-xs">
+                            @{row.username}
+                          </Text>
+                        </View>
                         <Text variant="muted" className="text-xs">
                           {row.email}
                         </Text>
@@ -348,7 +450,7 @@ export default function UsersScreen() {
                       variant="outline"
                       size="sm"
                       disabled={isSelf}
-                      onPress={() => confirmRemove(row)}>
+                      onPress={() => setPendingDelete(row)}>
                       <Trash size={14} weight="bold" color={isSelf ? muted : danger} />
                       <Text style={{ color: isSelf ? muted : danger }}>
                         {isSelf ? 'This is you' : 'Delete account'}
@@ -359,6 +461,17 @@ export default function UsersScreen() {
               );
             })}
       </ScrollView>
+
+      <ConfirmModal
+        visible={pendingDelete !== null}
+        title="Delete account?"
+        message={`${pendingDelete?.fullName || pendingDelete?.email} will lose access immediately. This cannot be undone.`}
+        confirmLabel="Delete account"
+        destructive
+        busy={deleting}
+        onConfirm={() => void remove()}
+        onClose={() => setPendingDelete(null)}
+      />
     </SafeAreaView>
   );
 }

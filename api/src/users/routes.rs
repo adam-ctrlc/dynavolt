@@ -1,32 +1,87 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{Json, Router};
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::auth::extract::AdminUser;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
-use crate::users::model::{CreateUser, User};
+use crate::users::model::{
+    CreateUser, SuggestUsername, User, UsernameSuggestion, clean_username,
+};
 use crate::users::service;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListQuery {
+    /// Free-text search over the name parts, email and username.
+    pub q: Option<String>,
+    /// Exact match on `admin` or `user`.
+    pub role: Option<String>,
+}
+
+/// Trims a filter and treats blank as "no filter".
+fn filter(value: Option<String>) -> Option<String> {
+    value
+        .map(|raw| raw.trim().to_owned())
+        .filter(|trimmed| !trimmed.is_empty())
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list).post(create))
+        .route("/username-suggestion", get(username_suggestion))
         .route("/{id}", axum::routing::delete(remove))
 }
 
-async fn list(State(state): State<AppState>, _admin: AdminUser) -> AppResult<Json<Vec<User>>> {
+async fn list(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Query(query): Query<ListQuery>,
+) -> AppResult<Json<Vec<User>>> {
+    let role = filter(query.role);
+
+    if let Some(role) = role.as_deref()
+        && role != "admin"
+        && role != "user"
+    {
+        return Err(AppError::BadRequest(format!("invalid role: {role}")));
+    }
+
     let users = sqlx::query_as::<_, User>(
-        "select id, email, role, first_name, middle_name, last_name,
+        "select id, email, username, role, first_name, middle_name, last_name,
                 trim(concat_ws(' ', first_name, middle_name, last_name)) as full_name,
                 created_at
-         from users order by created_at",
+         from users
+         where ($1::text is null or role = $1)
+           and ($2::text is null
+                or email ilike '%' || $2 || '%'
+                or username ilike '%' || $2 || '%'
+                or first_name ilike '%' || $2 || '%'
+                or middle_name ilike '%' || $2 || '%'
+                or last_name ilike '%' || $2 || '%'
+                or trim(concat_ws(' ', first_name, middle_name, last_name)) ilike '%' || $2 || '%')
+         order by created_at",
     )
+    .bind(role)
+    .bind(filter(query.q))
     .fetch_all(&state.pool)
     .await?;
 
     Ok(Json(users))
+}
+
+/// Backs the "Generate" button on the add-account form.
+async fn username_suggestion(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Query(query): Query<SuggestUsername>,
+) -> AppResult<Json<UsernameSuggestion>> {
+    let username = service::suggest_username(&state.pool, &query.first_name, &query.last_name).await?;
+
+    Ok(Json(UsernameSuggestion { username }))
 }
 
 async fn create(
@@ -56,6 +111,21 @@ async fn create(
 
     if taken.is_some() {
         return Err(AppError::BadRequest("email already registered".to_owned()));
+    }
+
+    // Only a username the admin typed is checked here; a blank one is generated in
+    // the service, and the formula only ever returns a free name.
+    if let Some(username) = body.username.as_deref().map(clean_username)
+        && !username.is_empty()
+    {
+        let clash: Option<Uuid> = sqlx::query_scalar("select id from users where username = $1")
+            .bind(&username)
+            .fetch_optional(&state.pool)
+            .await?;
+
+        if clash.is_some() {
+            return Err(AppError::BadRequest("username already taken".to_owned()));
+        }
     }
 
     service::create(&state.pool, &body).await?;

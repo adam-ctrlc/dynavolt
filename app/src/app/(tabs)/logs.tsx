@@ -1,9 +1,10 @@
 import { useColorScheme } from 'nativewind';
 import ArrowsClockwise from 'phosphor-react-native/src/icons/ArrowsClockwise';
 import ChartLine from 'phosphor-react-native/src/icons/ChartLine';
+import MagnifyingGlass from 'phosphor-react-native/src/icons/MagnifyingGlass';
 import Warning from 'phosphor-react-native/src/icons/Warning';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { G, Line, Rect, Text as SvgText } from 'react-native-svg';
 
@@ -11,6 +12,7 @@ import { LogListSkeleton } from '@/components/ac/log-skeleton';
 import { SourceBadge } from '@/components/ac/source-badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Pager } from '@/components/ui/pager';
 import { SearchField } from '@/components/ui/search-field';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -218,6 +220,7 @@ export default function LogsScreen() {
 
   return (
     <SafeAreaView className="bg-background flex-1" edges={['top']}>
+      <KeyboardAvoidingView className="flex-1" behavior="padding">
       <ScrollView
         ref={scroller}
         contentContainerClassName="gap-3 p-4 pb-8"
@@ -280,16 +283,13 @@ export default function LogsScreen() {
         {loading ? <LogListSkeleton /> : null}
 
         {!loading && rows.length === 0 ? (
-          <Card className="py-0">
-            <CardContent className="items-center gap-1 p-6">
-              <Text className="font-semibold">
-                {filtering ? 'No matching records' : 'No records yet'}
-              </Text>
-              <Text variant="muted" className="text-center text-sm">
-                {filtering ? 'Try a different search or filter.' : 'Readings appear here once sampled.'}
-              </Text>
-            </CardContent>
-          </Card>
+          <EmptyState
+            icon={filtering ? MagnifyingGlass : ChartLine}
+            title={filtering ? 'No matching records' : 'No records yet'}
+            description={
+              filtering ? 'Try a different search or filter.' : 'Readings appear here once sampled.'
+            }
+          />
         ) : null}
 
         {loading
@@ -356,9 +356,13 @@ export default function LogsScreen() {
             offset={offset}
             onOffsetChange={goToPage}
             noun="record"
+            onInputFocus={() =>
+              setTimeout(() => scroller.current?.scrollToEnd({ animated: true }), 150)
+            }
           />
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

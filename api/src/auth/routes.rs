@@ -14,7 +14,10 @@ use crate::users::model::clean_optional;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginRequest {
-    pub email: String,
+    /// Email or username. Accepts either so people can sign in with whichever they
+    /// remember. `email` is still read for older clients.
+    #[serde(alias = "email")]
+    pub identifier: String,
     pub password: String,
     /// The portal the caller chose. Enforced here, not just in the app: the account's
     /// real role must match, so a user account cannot enter through the admin portal.
@@ -27,6 +30,7 @@ pub struct LoginRequest {
 pub struct UserResponse {
     pub id: Uuid,
     pub email: String,
+    pub username: String,
     pub role: Role,
     pub first_name: String,
     pub middle_name: Option<String>,
@@ -39,6 +43,7 @@ impl UserResponse {
         Self {
             id: found.id,
             email: found.email,
+            username: found.username,
             role,
             full_name: found.full_name,
             first_name: found.first_name,
@@ -59,6 +64,7 @@ pub struct LoginResponse {
 struct Credentials {
     id: Uuid,
     email: String,
+    username: String,
     password_hash: String,
     role: String,
     first_name: String,
@@ -72,7 +78,7 @@ struct Credentials {
 macro_rules! credentials_select {
     ($predicate:literal) => {
         concat!(
-            "select id, email, password_hash, role,
+            "select id, email, username, password_hash, role,
                     first_name, middle_name, last_name,
                     trim(concat_ws(' ', first_name, middle_name, last_name)) as full_name
              from users where ",
@@ -108,8 +114,10 @@ async fn login(
     State(state): State<AppState>,
     Json(body): Json<LoginRequest>,
 ) -> AppResult<Json<LoginResponse>> {
-    let found = sqlx::query_as::<_, Credentials>(credentials_select!("email = $1"))
-        .bind(body.email.trim().to_lowercase())
+    // Email is stored lowercased and usernames are always lowercase, so one
+    // lowercased needle matches either column.
+    let found = sqlx::query_as::<_, Credentials>(credentials_select!("email = $1 or username = $1"))
+        .bind(body.identifier.trim().to_lowercase())
         .fetch_optional(&state.pool)
         .await?;
 
@@ -172,7 +180,7 @@ async fn update_me(
         "update users
          set first_name = $1, middle_name = $2, last_name = $3
          where id = $4
-         returning id, email, password_hash, role,
+         returning id, email, username, password_hash, role,
                    first_name, middle_name, last_name,
                    trim(concat_ws(' ', first_name, middle_name, last_name)) as full_name",
     )

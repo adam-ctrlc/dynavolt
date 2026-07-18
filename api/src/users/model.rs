@@ -9,6 +9,7 @@ use crate::auth::Role;
 pub struct User {
     pub id: Uuid,
     pub email: String,
+    pub username: String,
     pub role: String,
     pub first_name: String,
     pub middle_name: Option<String>,
@@ -27,6 +28,34 @@ pub struct CreateUser {
     #[serde(default)]
     pub middle_name: Option<String>,
     pub last_name: String,
+    /// Optional: the database generates one from the name when this is absent.
+    #[serde(default)]
+    pub username: Option<String>,
+}
+
+/// Query for `GET /users/username-suggestion`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestUsername {
+    pub first_name: String,
+    pub last_name: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsernameSuggestion {
+    pub username: String,
+}
+
+/// Lowercases and strips a username to the same character set the database formula
+/// uses, so a value typed in the app and one generated in SQL cannot disagree.
+#[must_use]
+pub fn clean_username(value: &str) -> String {
+    value
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_lowercase()
 }
 
 /// Composes the display name the same way `full_name` is composed in SQL, so a
