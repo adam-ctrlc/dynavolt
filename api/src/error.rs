@@ -17,6 +17,8 @@ pub enum AppError {
     InvalidEnv(String),
     #[error("invalid credentials")]
     InvalidCredentials,
+    #[error("{}", .0.portal_hint())]
+    PortalMismatch(crate::auth::Role),
     #[error("missing or invalid token")]
     Unauthorized,
     #[error("admin access required")]
@@ -54,7 +56,9 @@ impl IntoResponse for AppError {
             | Self::InvalidEnv(_)
             | Self::PasswordHash
             | Self::Token => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::InvalidCredentials | Self::Unauthorized => StatusCode::UNAUTHORIZED,
+            Self::InvalidCredentials | Self::PortalMismatch(_) | Self::Unauthorized => {
+                StatusCode::UNAUTHORIZED
+            }
             Self::Forbidden => StatusCode::FORBIDDEN,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,

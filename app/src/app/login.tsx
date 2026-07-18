@@ -3,9 +3,11 @@ import { useColorScheme } from 'nativewind';
 import Envelope from 'phosphor-react-native/src/icons/Envelope';
 import Eye from 'phosphor-react-native/src/icons/Eye';
 import EyeSlash from 'phosphor-react-native/src/icons/EyeSlash';
+import HardHat from 'phosphor-react-native/src/icons/HardHat';
 import Info from 'phosphor-react-native/src/icons/Info';
 import Lock from 'phosphor-react-native/src/icons/Lock';
 import Palette from 'phosphor-react-native/src/icons/Palette';
+import Wrench from 'phosphor-react-native/src/icons/Wrench';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Image, KeyboardAvoidingView, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,9 +18,22 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { IconInput } from '@/components/ui/icon-input';
+import { Segmented } from '@/components/ui/segmented';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/features/auth/context';
+import type { Role } from '@/features/auth/types';
 import { useAppearance } from '@/lib/appearance';
+
+const ROLES = [
+  { label: 'User', value: 'user' as Role, icon: HardHat },
+  { label: 'Admin', value: 'admin' as Role, icon: Wrench },
+];
+
+/** The role's full title, used in the changing hint under the picker. */
+const ROLE_TITLE: Record<Role, string> = {
+  user: 'Power Utility Personnel',
+  admin: 'Maintenance Engineer',
+};
 
 export default function LoginScreen() {
   const { token, signIn } = useAuth();
@@ -30,6 +45,7 @@ export default function LoginScreen() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState<Role>('user');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [reveal, setReveal] = useState(false);
@@ -54,7 +70,7 @@ export default function LoginScreen() {
     setBusy(true);
     setError(null);
     try {
-      await signIn(email.trim(), password);
+      await signIn(email.trim(), password, role);
     } catch (caught) {
       setError((caught as Error).message);
     } finally {
@@ -115,6 +131,22 @@ export default function LoginScreen() {
 
           <Card>
             <CardContent className="gap-4 p-5">
+              <View className="gap-1.5">
+                <Text className="text-sm font-medium">Signing in as</Text>
+                <Segmented
+                  fill
+                  variant="solid"
+                  options={ROLES}
+                  value={role}
+                  onChange={setRole}
+                  activeColor={primary.hex}
+                  inactiveColor={muted}
+                />
+                <Text variant="muted" className="text-[10px]">
+                  You are signing in as a {ROLE_TITLE[role]}. This must match your account.
+                </Text>
+              </View>
+
               <View className="gap-1.5">
                 <Text className="text-sm font-medium">Email</Text>
                 <IconInput

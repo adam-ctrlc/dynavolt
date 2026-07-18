@@ -30,6 +30,16 @@ impl Role {
             Self::User => "user",
         }
     }
+
+    /// Shown when someone signs in through the wrong portal. Names the button they
+    /// should tap. Starts lowercase so it composes; the JSON layer sentence cases it.
+    #[must_use]
+    pub const fn portal_hint(self) -> &'static str {
+        match self {
+            Self::Admin => "you're an admin. Choose Admin above, then sign in",
+            Self::User => "you're a standard user. Choose User above, then sign in",
+        }
+    }
 }
 
 impl fmt::Display for Role {

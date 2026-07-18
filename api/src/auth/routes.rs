@@ -16,6 +16,10 @@ use crate::users::model::clean_optional;
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
+    /// The portal the caller chose. Enforced here, not just in the app: the account's
+    /// real role must match, so a user account cannot enter through the admin portal.
+    #[serde(default)]
+    pub role: Option<Role>,
 }
 
 #[derive(Debug, Serialize)]
@@ -119,6 +123,15 @@ async fn login(
     }
 
     let role: Role = found.role.parse()?;
+
+    // Checked only after the password, so a wrong portal on a bad password still
+    // reads "invalid credentials" and reveals neither the account nor its role.
+    if let Some(chosen) = body.role
+        && chosen != role
+    {
+        return Err(AppError::PortalMismatch(role));
+    }
+
     let token = jwt::encode(&state.jwt_secret, found.id, role)?;
 
     Ok(Json(LoginResponse {

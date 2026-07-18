@@ -10,7 +10,7 @@ import {
 } from 'react';
 
 import * as api from '@/features/auth/api';
-import type { User } from '@/features/auth/types';
+import type { Role, User } from '@/features/auth/types';
 
 const TOKEN_KEY = 'dynavolt.token';
 
@@ -18,7 +18,7 @@ type AuthValue = {
   token: string | null;
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string, role?: Role) => Promise<void>;
   signOut: () => Promise<void>;
   /** Replaces the cached account after the API returns an updated one. */
   setUser: (user: User) => void;
@@ -66,8 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    const result = await api.login(email, password);
+  const signIn = useCallback(async (email: string, password: string, role?: Role) => {
+    const result = await api.login(email, password, role);
     await SecureStore.setItemAsync(TOKEN_KEY, result.token);
     setToken(result.token);
     setUser(result.user);

@@ -1,10 +1,10 @@
-import type { LoginResponse, User } from '@/features/auth/types';
+import type { LoginResponse, Role, User } from '@/features/auth/types';
 import { request } from '@/lib/api-client';
 
-export function login(email: string, password: string) {
+export function login(email: string, password: string, role?: Role) {
   return request<LoginResponse>('/auth/login', {
     method: 'POST',
-    body: { email, password },
+    body: role ? { email, password, role } : { email, password },
   });
 }
 
