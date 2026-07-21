@@ -4,6 +4,7 @@ import { View } from 'react-native';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Text } from '@/components/ui/text';
+import { isPlaceholder } from '@/lib/reading-format';
 import { cn } from '@/lib/utils';
 
 type MetricCardProps = {
@@ -35,10 +36,18 @@ export function MetricCard({
           </Text>
         </View>
         <View className="flex-row items-baseline gap-0.5">
-          <Text className="text-lg font-bold leading-none">{value}</Text>
-          <Text variant="muted" className="text-[10px]">
-            {unit}
-          </Text>
+          {isPlaceholder(value) ? (
+            <Text variant="muted" className="text-lg font-bold leading-none">
+              {value}
+            </Text>
+          ) : (
+            <>
+              <Text className="text-lg font-bold leading-none">{value}</Text>
+              <Text variant="muted" className="text-[10px]">
+                {unit}
+              </Text>
+            </>
+          )}
         </View>
       </CardContent>
     </Card>

@@ -3,17 +3,20 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde::Deserialize;
 
-use crate::auth::extract::{AdminUser, AuthUser};
+use crate::auth::extract::{AdminUser, AuthUser, DeviceAuth};
 use crate::error::{AppError, AppResult};
 use crate::page::{Page, Paging};
 use crate::readings::model::{LiveReading, Reading, ReadingInput, Status, TrendPoint};
 use crate::readings::service;
+use crate::search;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryQuery {
     pub status: Option<String>,
+    /// Restricts to a single feed: 'hardware' or 'simulator'.
+    pub source: Option<String>,
     /// Free-text search over status, source, power and the local timestamp.
     pub q: Option<String>,
     pub limit: Option<i64>,
@@ -50,22 +53,32 @@ pub fn router() -> Router<AppState> {
 
 /// Dashboard heartbeat. Poll this as fast as you like.
 async fn latest(State(state): State<AppState>, _auth: AuthUser) -> AppResult<Json<LiveReading>> {
-    let reading = service::live(
-        &state.pool,
-        state.simulator_enabled,
-        state.sample_interval_ms,
-    )
-    .await?;
+    let reading = service::live(&state.pool, state.sample_interval_ms).await?;
 
     Ok(Json(reading))
 }
 
-/// Hardware ingest. Real sensors push measurements here.
+/// Hardware ingest. Real sensors push measurements here, authenticated by the
+/// `x-device-key` header. Fails closed: no configured key means no ingest.
 async fn ingest(
     State(state): State<AppState>,
+    _device: DeviceAuth,
     Json(body): Json<ReadingInput>,
 ) -> AppResult<Json<Reading>> {
-    if body.voltage_v < 0.0 || body.current_a < 0.0 {
+    let empty = body.voltage_v.is_none()
+        && body.current_a.is_none()
+        && body.temperature_c.is_none()
+        && body.power_w.is_none()
+        && body.power_factor.is_none()
+        && body.frequency_hz.is_none()
+        && body.energy_kwh.is_none()
+        && body.humidity_pct.is_none();
+    if empty {
+        return Err(AppError::BadRequest(
+            "at least one measurement is required".to_owned(),
+        ));
+    }
+    if body.voltage_v.is_some_and(|v| v < 0.0) || body.current_a.is_some_and(|c| c < 0.0) {
         return Err(AppError::BadRequest(
             "voltage and current must not be negative".to_owned(),
         ));
@@ -99,10 +112,17 @@ async fn history(
     let (limit, offset) =
         Paging::new(query.limit, query.offset).resolve(DEFAULT_LIMIT, MAX_LIMIT);
     let status = filter(query.status);
-    let q = filter(query.q);
+    let source = filter(query.source);
+    let q = filter(query.q).map(|needle| search::escape_like(&needle));
 
     if let Some(status) = status.as_deref() {
         status.parse::<Status>()?;
+    }
+    if let Some(source) = source.as_deref() {
+        match source {
+            "hardware" | "simulator" => {}
+            other => return Err(AppError::BadRequest(format!("invalid source: {other}"))),
+        }
     }
 
     // Counted separately so `total` covers every match, not just this window.
@@ -113,10 +133,12 @@ async fn history(
                 or status ilike '%' || $2 || '%'
                 or source ilike '%' || $2 || '%'
                 or round(apparent_power_va::numeric)::text ilike '%' || $2 || '%'
-                or to_char(recorded_at + interval '8 hours', 'YYYY-MM-DD HH24:MI') ilike '%' || $2 || '%')",
+                or to_char(recorded_at + interval '8 hours', 'YYYY-MM-DD HH24:MI') ilike '%' || $2 || '%')
+           and ($3::text is null or source = $3)",
     )
     .bind(status.clone())
     .bind(q.clone())
+    .bind(source.clone())
     .fetch_one(&state.pool)
     .await?;
 
@@ -131,11 +153,13 @@ async fn history(
                 or source ilike '%' || $2 || '%'
                 or round(apparent_power_va::numeric)::text ilike '%' || $2 || '%'
                 or to_char(recorded_at + interval '8 hours', 'YYYY-MM-DD HH24:MI') ilike '%' || $2 || '%')
+           and ($3::text is null or source = $3)
          order by recorded_at desc
-         limit $3 offset $4",
+         limit $4 offset $5",
     )
     .bind(status)
     .bind(q)
+    .bind(source)
     .bind(limit)
     .bind(offset)
     .fetch_all(&state.pool)

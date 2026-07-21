@@ -27,6 +27,7 @@ import { greet } from '@/features/auth/greeting';
 import * as readings from '@/features/readings/api';
 import { usePoll } from '@/hooks/use-poll';
 import { useAppearance } from '@/lib/appearance';
+import { formatValue } from '@/lib/reading-format';
 
 const HEARTBEAT_MS = 1000;
 
@@ -57,6 +58,30 @@ export default function DashboardScreen() {
 
   // Recomputed each heartbeat, so the greeting rolls over with the clock.
   const { greeting, subtitle } = greet(user);
+
+  function renderSourceBadge() {
+    if (!data) return null;
+    switch (true) {
+      case data.simulated:
+        return (
+          <Badge variant="secondary">
+            <Text>Simulated</Text>
+          </Badge>
+        );
+      case data.connected:
+        return (
+          <Badge>
+            <Text>ESP32 live</Text>
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="outline" className="opacity-60">
+            <Text>ESP32 offline</Text>
+          </Badge>
+        );
+    }
+  }
 
   return (
     <SafeAreaView className="bg-background flex-1" edges={['top']}>
@@ -121,21 +146,28 @@ export default function DashboardScreen() {
           <CardHeader className="gap-2 pb-0">
             <View className="flex-row items-center justify-between">
               <CardDescription>Status</CardDescription>
-              <Badge variant={overload ? 'destructive' : 'default'}>
-                <Text>{overload ? 'OVERLOAD' : 'NORMAL'}</Text>
-              </Badge>
+              <View className="flex-row items-center gap-1.5">
+                {renderSourceBadge()}
+                <Badge variant={overload ? 'destructive' : 'default'}>
+                  <Text>{overload ? 'OVERLOAD' : 'NORMAL'}</Text>
+                </Badge>
+              </View>
             </View>
             <View className="flex-row items-end gap-2">
               <Text
                 className="text-5xl font-bold leading-none"
                 style={{ color: overload ? danger : ac }}>
-                {data ? data.apparentPowerVa.toFixed(0) : '--'}
+                {formatValue(data ? data.apparentPowerVa : undefined, 0)}
               </Text>
-              <Text variant="muted" className="pb-1 text-lg">
-                VA
-              </Text>
+              {data && data.apparentPowerVa !== null ? (
+                <Text variant="muted" className="pb-1 text-lg">
+                  VA
+                </Text>
+              ) : null}
               <Text variant="muted" className="ml-auto pb-1 text-sm">
-                {data ? `${data.loadPercent.toFixed(0)}% of ${data.loadThresholdVa} VA` : ''}
+                {data && data.loadPercent !== null
+                  ? `${data.loadPercent.toFixed(0)}% of ${data.loadThresholdVa} VA`
+                  : ''}
               </Text>
             </View>
           </CardHeader>
@@ -154,7 +186,7 @@ export default function DashboardScreen() {
             className="flex-1"
             icon={PlugsConnected}
             label="Current"
-            value={data ? data.currentA.toFixed(2) : '--'}
+            value={formatValue(data ? data.currentA : undefined, 2)}
             unit="A"
             iconColor={ac}
           />
@@ -162,7 +194,7 @@ export default function DashboardScreen() {
             className="flex-1"
             icon={Lightning}
             label="Voltage"
-            value={data ? data.voltageV.toFixed(1) : '--'}
+            value={formatValue(data ? data.voltageV : undefined, 1)}
             unit="V"
             iconColor={ac}
           />
@@ -170,7 +202,7 @@ export default function DashboardScreen() {
             className="flex-1"
             icon={Thermometer}
             label="Temp"
-            value={data ? data.temperatureC.toFixed(1) : '--'}
+            value={formatValue(data ? data.temperatureC : undefined, 1)}
             unit="°C"
             iconColor={hot ? danger : ac}
           />
@@ -178,7 +210,7 @@ export default function DashboardScreen() {
             className="flex-1"
             icon={Drop}
             label="Humidity"
-            value={data?.humidityPct === null || !data ? '--' : data.humidityPct.toFixed(0)}
+            value={formatValue(data ? data.humidityPct : undefined, 0)}
             unit="%"
             iconColor={ac}
           />
@@ -198,7 +230,9 @@ export default function DashboardScreen() {
                 Temperature warning
               </Text>
               <Text variant="muted" className="text-xs">
-                {data ? `${data.temperatureC.toFixed(1)} °C is above the ${data.tempThresholdC} °C threshold.` : ''}
+                {data && data.temperatureC !== null
+                  ? `${data.temperatureC.toFixed(1)} °C is above the ${data.tempThresholdC} °C threshold.`
+                  : ''}
               </Text>
             </View>
           </View>

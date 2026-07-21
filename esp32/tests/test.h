@@ -1,6 +1,6 @@
 #pragma once
 
-#include "main.h"
+#include "../functions/main.h"
 
 #define RELAY_TEST_INTERVAL_MS 5000
 

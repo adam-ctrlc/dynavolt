@@ -23,8 +23,11 @@ export type ConnectionEvent = {
   atLabel: string;
 };
 
-export type WifiConfig = {
-  wifiSsid: string;
-  wifiPassword: string;
+export type WifiNetwork = {
+  id: number;
+  ssid: string;
+  password: string;
+  isDefault: boolean;
+  selected: boolean;
   updatedAt: string;
 };

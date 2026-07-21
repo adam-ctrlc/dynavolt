@@ -14,6 +14,7 @@ pub struct Config {
     pub port: u16,
     pub simulator_enabled: bool,
     pub sample_interval_ms: i64,
+    pub device_api_key: Option<String>,
 }
 
 fn required(key: &str) -> AppResult<String> {
@@ -37,6 +38,7 @@ impl Config {
             port: parsed("PORT", 8080)?,
             simulator_enabled: parsed("SIMULATOR_ENABLED", true)?,
             sample_interval_ms: parsed("SAMPLE_INTERVAL_MS", DEFAULT_SAMPLE_INTERVAL_MS)?,
+            device_api_key: std::env::var("DEVICE_API_KEY").ok(),
         })
     }
 }

@@ -7,6 +7,7 @@ pub mod error;
 pub mod notifications;
 pub mod page;
 pub mod readings;
+pub mod search;
 pub mod settings;
 pub mod state;
 pub mod time;
@@ -78,6 +79,7 @@ fn router(pool: PgPool, config: &Config) -> Router {
         jwt_secret: Arc::from(config.jwt_secret.as_str()),
         simulator_enabled: config.simulator_enabled,
         sample_interval_ms: config.sample_interval_ms,
+        device_api_key: config.device_api_key.as_deref().map(Arc::from),
     };
 
     let v1 = Router::new()

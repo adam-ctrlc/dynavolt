@@ -8,6 +8,7 @@ type SegmentedOption<T> = {
   label: string;
   value: T;
   icon?: React.ComponentType<{ size?: number; color?: string; weight?: 'bold' }>;
+  disabled?: boolean;
 };
 
 type SegmentedProps<T> = {
@@ -54,6 +55,7 @@ export function Segmented<T extends string | number | boolean | null>({
       )}>
       {options.map((option) => {
         const selected = option.value === value;
+        const disabled = option.disabled ?? false;
         const Icon = option.icon;
         // Solid paints its own fill, so its selected label goes white for contrast.
         const color = selected ? (solid ? '#ffffff' : activeColor) : inactiveColor;
@@ -63,10 +65,12 @@ export function Segmented<T extends string | number | boolean | null>({
             key={option.label}
             variant="ghost"
             size="sm"
+            disabled={disabled}
             className={cn(
               'h-9 gap-1.5 rounded-full px-3',
               fill && 'flex-1',
-              selected && !solid && 'bg-background shadow-sm shadow-black/5'
+              selected && !solid && 'bg-background shadow-sm shadow-black/5',
+              disabled && 'opacity-40'
             )}
             style={selected && solid ? { backgroundColor: activeColor } : undefined}
             onPress={() => onChange(option.value)}>

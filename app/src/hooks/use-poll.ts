@@ -38,17 +38,21 @@ export function usePoll<T>(
     }
 
     let active = true;
+    let latest = 0;
     const controller = new AbortController();
 
     async function tick() {
+      // A slow response must not clobber a fresher one: only the most recently
+      // started tick is allowed to apply its result.
+      const seq = ++latest;
       try {
         const result = await saved.current(controller.signal);
-        if (active) {
+        if (active && seq === latest) {
           setData(result);
           setError(null);
         }
       } catch (caught) {
-        if (active && (caught as Error).name !== 'AbortError') {
+        if (active && seq === latest && (caught as Error).name !== 'AbortError') {
           setError(caught as Error);
         }
       }

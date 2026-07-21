@@ -60,3 +60,43 @@ impl FromRequestParts<AppState> for AdminUser {
         Ok(Self(user))
     }
 }
+
+/// Authenticates the ESP32 by its shared `x-device-key` header. Fails closed: an
+/// unset, missing, or mismatched key is rejected, and the comparison is constant
+/// time so a wrong key leaks nothing through timing.
+#[derive(Debug, Clone, Copy)]
+pub struct DeviceAuth;
+
+impl FromRequestParts<AppState> for DeviceAuth {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let Some(expected) = state.device_api_key.as_deref() else {
+            return Err(AppError::Unauthorized);
+        };
+        let Some(provided) = parts
+            .headers
+            .get("x-device-key")
+            .and_then(|value| value.to_str().ok())
+        else {
+            return Err(AppError::Unauthorized);
+        };
+        if !constant_time_eq(expected.as_bytes(), provided.as_bytes()) {
+            return Err(AppError::Unauthorized);
+        }
+
+        Ok(Self)
+    }
+}
+
+/// Compares two byte strings without leaking their contents through timing.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+
+    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}

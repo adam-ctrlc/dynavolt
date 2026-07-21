@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::auth::extract::AdminUser;
 use crate::error::{AppError, AppResult};
+use crate::search;
 use crate::state::AppState;
 use crate::users::model::{
     CreateUser, SuggestUsername, User, UsernameSuggestion, clean_username,
@@ -66,7 +67,7 @@ async fn list(
          order by created_at",
     )
     .bind(role)
-    .bind(filter(query.q))
+    .bind(filter(query.q).map(|needle| search::escape_like(&needle)))
     .fetch_all(&state.pool)
     .await?;
 

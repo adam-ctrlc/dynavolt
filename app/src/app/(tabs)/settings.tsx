@@ -12,24 +12,40 @@ import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DeviceCard } from '@/components/ac/device-card';
+import { SourceModeModal } from '@/components/source-mode-modal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { IconInput } from '@/components/ui/icon-input';
+import { Segmented } from '@/components/ui/segmented';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/features/auth/context';
+import * as deviceApi from '@/features/device/api';
 import * as settingsApi from '@/features/settings/api';
+import type { SourceMode } from '@/features/settings/types';
+import { usePoll } from '@/hooks/use-poll';
 import { useAppearance } from '@/lib/appearance';
 
 type Thresholds = { load: string; temp: string };
 
 const EMPTY: Thresholds = { load: '', temp: '' };
 
+const SOURCE_OPTIONS: { label: string; value: SourceMode }[] = [
+  { label: 'Simulation', value: 'simulation' },
+  { label: 'ESP32', value: 'hardware' },
+];
+
 /** Matches `--primary-foreground`, which the appearance provider pins to white. */
 const ON_PRIMARY = '#ffffff';
 
 /** The degree sign is part of the unit symbol, so it is written out rather than dropped. */
 const DEGREE_C = '°C';
+
+/** How often the ESP32 availability indicator refreshes. */
+const DEVICE_POLL_MS = 5000;
+
+/** Green dot when the board has reported in recently. */
+const AVAILABLE_GREEN = '#22c55e';
 
 export default function SettingsScreen() {
   const { token } = useAuth();
@@ -44,6 +60,8 @@ export default function SettingsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sourceMode, setSourceMode] = useState<SourceMode>('simulation');
+  const [connecting, setConnecting] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -55,6 +73,7 @@ export default function SettingsScreen() {
       };
       setSaved(next);
       setDraft(next);
+      setSourceMode(current.sourceMode);
       setError(null);
     } catch (caught) {
       setError((caught as Error).message);
@@ -62,6 +81,64 @@ export default function SettingsScreen() {
       setLoading(false);
     }
   }, [token]);
+
+  // Polls independently of the chosen mode so the board shows as available even
+  // while readings still come from the simulation.
+  const deviceFetcher = useCallback(
+    (signal: AbortSignal) => deviceApi.status(token ?? '', signal),
+    [token]
+  );
+  const { data: device } = usePoll(deviceFetcher, DEVICE_POLL_MS, Boolean(token));
+  const esp32Available = device?.connected ?? false;
+
+  async function changeSource(next: SourceMode) {
+    if (next === sourceMode) return;
+
+    setError(null);
+    setStatus(null);
+
+    switch (next) {
+      case 'hardware': {
+        if (!esp32Available) {
+          setError('ESP32 is not available. Turn on the board and wait for it to connect.');
+          return;
+        }
+        setSourceMode('hardware');
+        try {
+          await settingsApi.setSourceMode(token ?? '', 'hardware');
+          setConnecting(true);
+        } catch (caught) {
+          setSourceMode('simulation');
+          setError((caught as Error).message);
+        }
+        break;
+      }
+      case 'simulation': {
+        setSourceMode('simulation');
+        try {
+          await settingsApi.setSourceMode(token ?? '', 'simulation');
+        } catch (caught) {
+          setError((caught as Error).message);
+        }
+        break;
+      }
+    }
+  }
+
+  function handleSynced() {
+    setConnecting(false);
+    setStatus('ESP32 connected');
+  }
+
+  async function handleCancelSource() {
+    setConnecting(false);
+    setSourceMode('simulation');
+    try {
+      await settingsApi.setSourceMode(token ?? '', 'simulation');
+    } catch (caught) {
+      setError((caught as Error).message);
+    }
+  }
 
   useEffect(() => {
     void refresh();
@@ -202,6 +279,43 @@ export default function SettingsScreen() {
 
         <Card className="gap-0 py-0">
           <CardHeader className="border-border border-b p-4">
+            <CardTitle className="text-base">Data source</CardTitle>
+            <Text variant="muted" className="text-xs">
+              Choose whether readings come from the simulation or a live ESP32 board.
+            </Text>
+          </CardHeader>
+          <CardContent className="gap-3 p-4">
+            {loading ? (
+              <Skeleton className="h-11 w-full rounded-full" />
+            ) : (
+              <Segmented
+                options={SOURCE_OPTIONS.map((option) =>
+                  option.value === 'hardware'
+                    ? { ...option, disabled: !esp32Available }
+                    : option
+                )}
+                value={sourceMode}
+                onChange={(next) => void changeSource(next)}
+                activeColor={primary.hex}
+                inactiveColor={muted}
+                variant="solid"
+                fill
+              />
+            )}
+            <View className="flex-row items-center gap-2">
+              <View
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: esp32Available ? AVAILABLE_GREEN : muted }}
+              />
+              <Text variant="muted" className="text-xs">
+                {esp32Available ? 'ESP32 available' : 'ESP32 not detected'}
+              </Text>
+            </View>
+          </CardContent>
+        </Card>
+
+        <Card className="gap-0 py-0">
+          <CardHeader className="border-border border-b p-4">
             <CardTitle className="text-base">User Management</CardTitle>
             <Text variant="muted" className="text-xs">
               Create accounts for engineers and utility personnel, or revoke access.
@@ -217,6 +331,13 @@ export default function SettingsScreen() {
 
         <DeviceCard />
       </ScrollView>
+
+      <SourceModeModal
+        visible={connecting}
+        token={token}
+        onSynced={handleSynced}
+        onCancel={() => void handleCancelSource()}
+      />
     </SafeAreaView>
   );
 }

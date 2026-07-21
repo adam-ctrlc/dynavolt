@@ -46,8 +46,25 @@ fn sentence_case(message: &str) -> String {
     })
 }
 
+/// A concurrent insert can lose the pre-check race and still hit a unique index.
+/// Postgres raises SQLSTATE 23505 for that, which is the caller's conflict, not a
+/// server fault.
+fn is_unique_violation(error: &sqlx::Error) -> bool {
+    matches!(
+        error,
+        sqlx::Error::Database(db) if db.code().as_deref() == Some("23505")
+    )
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        if let Self::Database(error) = &self
+            && is_unique_violation(error)
+        {
+            let message = sentence_case("already exists");
+            return (StatusCode::CONFLICT, Json(json!({ "error": message }))).into_response();
+        }
+
         let status = match &self {
             Self::Database(_)
             | Self::Io(_)

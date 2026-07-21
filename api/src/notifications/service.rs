@@ -25,9 +25,10 @@ pub async fn register(pool: &PgPool, user_id: uuid::Uuid, body: &RegisterToken) 
     Ok(())
 }
 
-pub async fn unregister(pool: &PgPool, token: &str) -> AppResult<()> {
-    sqlx::query("delete from push_tokens where token = $1")
+pub async fn unregister(pool: &PgPool, token: &str, user_id: uuid::Uuid) -> AppResult<()> {
+    sqlx::query("delete from push_tokens where token = $1 and user_id = $2")
         .bind(token.trim())
+        .bind(user_id)
         .execute(pool)
         .await?;
 

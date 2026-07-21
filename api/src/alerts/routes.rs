@@ -8,6 +8,7 @@ use crate::alerts::model::Alert;
 use crate::auth::extract::AuthUser;
 use crate::error::{AppError, AppResult};
 use crate::page::{Page, Paging};
+use crate::search;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -47,7 +48,7 @@ async fn list(
     let (limit, offset) =
         Paging::new(query.limit, query.offset).resolve(DEFAULT_LIMIT, MAX_LIMIT);
     let kind = filter(query.kind);
-    let q = filter(query.q);
+    let q = filter(query.q).map(|needle| search::escape_like(&needle));
 
     if let Some(kind) = kind.as_deref()
         && kind != model::KIND_OVERLOAD

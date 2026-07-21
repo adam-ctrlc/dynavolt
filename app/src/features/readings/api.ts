@@ -6,6 +6,7 @@ export type HistoryFilters = {
   limit?: number;
   offset?: number;
   status?: string;
+  source?: 'hardware' | 'simulator';
   q?: string;
 };
 
@@ -18,6 +19,7 @@ export function history(token: string, filters: HistoryFilters = {}, signal?: Ab
   if (filters.limit !== undefined) params.set('limit', String(filters.limit));
   if (filters.offset) params.set('offset', String(filters.offset));
   if (filters.status) params.set('status', filters.status);
+  if (filters.source) params.set('source', filters.source);
   if (filters.q?.trim()) params.set('q', filters.q.trim());
 
   return request<Page<Reading>>(`/readings?${params.toString()}`, { token, signal });

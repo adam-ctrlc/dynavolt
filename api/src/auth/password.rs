@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
@@ -20,4 +22,16 @@ pub fn verify(password: &str, password_hash: &str) -> bool {
     Argon2::default()
         .verify_password(password.as_bytes(), &parsed)
         .is_ok()
+}
+
+/// Runs a verification against a fixed dummy hash so the no-account path costs the
+/// same argon2 work as a real one. If the pad cannot be built, it simply skips the
+/// work; timing parity is best effort and never a reason to fail the request.
+pub fn verify_dummy(password: &str) {
+    static PAD: OnceLock<String> = OnceLock::new();
+
+    let pad = PAD.get_or_init(|| hash("dynavolt-timing-pad").unwrap_or_default());
+    if !pad.is_empty() {
+        let _ = verify(password, pad);
+    }
 }

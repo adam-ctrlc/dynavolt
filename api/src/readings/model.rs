@@ -43,14 +43,18 @@ impl FromStr for Status {
 
 /// A raw measurement, either simulated or pushed by hardware.
 ///
-/// Everything past the first three is optional: a board without a PZEM still
-/// reports voltage, current and temperature.
+/// Every field is optional: a board may carry only a temperature sensor, or only
+/// the electrical sensors, and still report what it has. A missing value stays
+/// missing all the way out rather than defaulting to zero.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadingInput {
-    pub voltage_v: f64,
-    pub current_a: f64,
-    pub temperature_c: f64,
+    #[serde(default)]
+    pub voltage_v: Option<f64>,
+    #[serde(default)]
+    pub current_a: Option<f64>,
+    #[serde(default)]
+    pub temperature_c: Option<f64>,
     #[serde(default)]
     pub power_w: Option<f64>,
     #[serde(default)]
@@ -68,9 +72,24 @@ impl ReadingInput {
     #[must_use]
     pub const fn core(voltage_v: f64, current_a: f64, temperature_c: f64) -> Self {
         Self {
-            voltage_v,
-            current_a,
-            temperature_c,
+            voltage_v: Some(voltage_v),
+            current_a: Some(current_a),
+            temperature_c: Some(temperature_c),
+            power_w: None,
+            power_factor: None,
+            frequency_hz: None,
+            energy_kwh: None,
+            humidity_pct: None,
+        }
+    }
+
+    /// A reading with no measurements at all, used when hardware has never reported.
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self {
+            voltage_v: None,
+            current_a: None,
+            temperature_c: None,
             power_w: None,
             power_factor: None,
             frequency_hz: None,
@@ -84,10 +103,10 @@ impl ReadingInput {
 #[serde(rename_all = "camelCase")]
 pub struct Reading {
     pub id: i64,
-    pub voltage_v: f64,
-    pub current_a: f64,
-    pub temperature_c: f64,
-    pub apparent_power_va: f64,
+    pub voltage_v: Option<f64>,
+    pub current_a: Option<f64>,
+    pub temperature_c: Option<f64>,
+    pub apparent_power_va: Option<f64>,
     pub status: String,
     pub source: String,
     pub power_w: Option<f64>,
@@ -102,17 +121,17 @@ pub struct Reading {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LiveReading {
-    pub voltage_v: f64,
-    pub current_a: f64,
-    pub temperature_c: f64,
+    pub voltage_v: Option<f64>,
+    pub current_a: Option<f64>,
+    pub temperature_c: Option<f64>,
     /// Derived from `temperature_c` on the way out; never stored, so the two cannot drift.
-    pub temperature_f: f64,
-    pub apparent_power_va: f64,
+    pub temperature_f: Option<f64>,
+    pub apparent_power_va: Option<f64>,
     pub status: Status,
     pub load_threshold_va: f64,
     pub temp_threshold_c: f64,
     pub temp_threshold_f: f64,
-    pub load_percent: f64,
+    pub load_percent: Option<f64>,
     pub over_temperature: bool,
     pub power_w: Option<f64>,
     pub power_factor: Option<f64>,
@@ -122,20 +141,25 @@ pub struct LiveReading {
     /// Q = sqrt(S^2 - P^2). Present only when real power is, since it cannot be
     /// recovered from apparent power alone.
     pub reactive_power_var: Option<f64>,
-    /// VA left before the load threshold. Negative once over.
-    pub headroom_va: f64,
+    /// VA left before the load threshold. Negative once over. `None` without a load reading.
+    pub headroom_va: Option<f64>,
     pub recorded_at: DateTime<Utc>,
+    /// True when the feed is derived from the clock rather than a real board.
+    pub simulated: bool,
+    /// True when a hardware reading arrived inside the connected window.
+    pub connected: bool,
 }
 
-/// Reactive power from the power triangle. `None` unless real power was measured.
+/// Reactive power from the power triangle. `None` unless both apparent and real power are present.
 #[must_use]
-pub fn reactive_power(apparent_power_va: f64, power_w: Option<f64>) -> Option<f64> {
-    power_w.map(|real| {
-        // Clamped at zero: sensor noise can make P marginally exceed S.
-        (apparent_power_va.mul_add(apparent_power_va, -(real * real)))
-            .max(0.0)
-            .sqrt()
-    })
+pub fn reactive_power(apparent_power_va: Option<f64>, power_w: Option<f64>) -> Option<f64> {
+    match (apparent_power_va, power_w) {
+        (Some(apparent), Some(real)) => {
+            // Clamped at zero: sensor noise can make P marginally exceed S.
+            Some(apparent.mul_add(apparent, -(real * real)).max(0.0).sqrt())
+        }
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]

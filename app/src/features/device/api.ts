@@ -1,4 +1,4 @@
-import type { ConnectionEvent, DeviceStatus, WifiConfig } from '@/features/device/types';
+import type { ConnectionEvent, DeviceStatus, WifiNetwork } from '@/features/device/types';
 import { request } from '@/lib/api-client';
 
 export function status(token: string, signal?: AbortSignal) {
@@ -9,14 +9,28 @@ export function history(token: string, signal?: AbortSignal) {
   return request<ConnectionEvent[]>('/device/history', { token, signal });
 }
 
-export function wifi(token: string, signal?: AbortSignal) {
-  return request<WifiConfig>('/device/wifi', { token, signal });
+export function networks(token: string, signal?: AbortSignal) {
+  return request<WifiNetwork[]>('/device/networks', { token, signal });
 }
 
-export function updateWifi(token: string, wifiSsid: string, wifiPassword: string) {
-  return request<WifiConfig>('/device/wifi', {
+export function addNetwork(token: string, ssid: string, password: string) {
+  return request<WifiNetwork>('/device/networks', {
+    method: 'POST',
+    token,
+    body: { ssid, password },
+  });
+}
+
+export function selectNetwork(token: string, id: number) {
+  return request<WifiNetwork>(`/device/networks/${id}/select`, {
     method: 'PUT',
     token,
-    body: { wifiSsid, wifiPassword },
+  });
+}
+
+export function removeNetwork(token: string, id: number) {
+  return request<void>(`/device/networks/${id}`, {
+    method: 'DELETE',
+    token,
   });
 }

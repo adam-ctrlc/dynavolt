@@ -121,8 +121,10 @@ async fn login(
         .fetch_optional(&state.pool)
         .await?;
 
-    // Verify even when the email is unknown so timing does not reveal which accounts exist.
+    // When no account matches, still spend one argon2 verification against a dummy
+    // hash so timing does not reveal which accounts exist.
     let Some(found) = found else {
+        password::verify_dummy(&body.password);
         return Err(AppError::InvalidCredentials);
     };
 

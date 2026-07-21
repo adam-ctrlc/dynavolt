@@ -15,6 +15,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pager } from '@/components/ui/pager';
 import { SearchField } from '@/components/ui/search-field';
+import { Segmented } from '@/components/ui/segmented';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Text } from '@/components/ui/text';
 import { useAuth } from '@/features/auth/context';
@@ -24,6 +25,7 @@ import * as settingsApi from '@/features/settings/api';
 import type { Reading, TrendPoint } from '@/features/readings/types';
 import { useDebounced } from '@/hooks/use-debounced';
 import { useAppearance } from '@/lib/appearance';
+import { formatValue, formatValueWithUnit } from '@/lib/reading-format';
 import { formatDateTime, formatDayLabel } from '@/lib/datetime';
 import { PAGE_SIZE } from '@/lib/pagination';
 
@@ -37,6 +39,14 @@ const LABEL_HEIGHT = 14;
 
 /** Matches `--primary-foreground`, which the appearance provider pins to white. */
 const ON_PRIMARY = '#ffffff';
+
+type SourceFilter = 'hardware' | 'simulator' | null;
+
+const SOURCE_FILTERS: { label: string; value: SourceFilter }[] = [
+  { label: 'All', value: null },
+  { label: 'Hardware', value: 'hardware' },
+  { label: 'Simulator', value: 'simulator' },
+];
 
 /**
  * Bars rather than a line: the series is usually a handful of days, and a single
@@ -154,6 +164,7 @@ export default function LogsScreen() {
   const [points, setPoints] = useState<TrendPoint[]>([]);
   const [query, setQuery] = useState('');
   const [onlyOverload, setOnlyOverload] = useState(false);
+  const [source, setSource] = useState<SourceFilter>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [threshold, setThreshold] = useState<number | null>(null);
@@ -175,7 +186,7 @@ export default function LogsScreen() {
   // land the pager on an empty page, so any filter change returns to page one.
   useEffect(() => {
     setOffset(0);
-  }, [debouncedQuery, onlyOverload]);
+  }, [debouncedQuery, onlyOverload, source]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -185,6 +196,7 @@ export default function LogsScreen() {
           limit: PAGE_SIZE,
           offset,
           status: onlyOverload ? 'overload' : undefined,
+          source: source ?? undefined,
           q: debouncedQuery,
         }),
         readingsApi.trend(token ?? '', 7),
@@ -198,7 +210,7 @@ export default function LogsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [token, onlyOverload, debouncedQuery, offset]);
+  }, [token, onlyOverload, source, debouncedQuery, offset]);
 
   useEffect(() => {
     void refresh();
@@ -216,7 +228,7 @@ export default function LogsScreen() {
     scroller.current?.scrollTo({ y: 0, animated: true });
   }
 
-  const filtering = debouncedQuery.trim().length > 0 || onlyOverload;
+  const filtering = debouncedQuery.trim().length > 0 || onlyOverload || source !== null;
 
   return (
     <SafeAreaView className="bg-background flex-1" edges={['top']}>
@@ -255,6 +267,15 @@ export default function LogsScreen() {
           value={query}
           onChangeText={setQuery}
           placeholder="Search status, source, VA, date..."
+        />
+
+        <Segmented
+          options={SOURCE_FILTERS}
+          value={source}
+          onChange={setSource}
+          activeColor={ac}
+          inactiveColor={muted}
+          fill
         />
 
         <View className="flex-row items-center gap-2">
@@ -304,7 +325,7 @@ export default function LogsScreen() {
                     <View className="flex-row items-center justify-between">
                       <View className="flex-row items-baseline gap-1.5">
                         <Text className="text-xl font-bold leading-none" style={{ color: accent }}>
-                          {row.apparentPowerVa.toFixed(0)}
+                          {formatValue(row.apparentPowerVa, 0)}
                         </Text>
                         <Text variant="muted" className="text-xs">
                           VA
@@ -322,19 +343,25 @@ export default function LogsScreen() {
                         <Text variant="muted" className="text-[10px] uppercase">
                           Voltage
                         </Text>
-                        <Text className="text-xs font-medium">{row.voltageV.toFixed(1)} V</Text>
+                        <Text className="text-xs font-medium">
+                          {formatValueWithUnit(row.voltageV, 1, 'V')}
+                        </Text>
                       </View>
                       <View>
                         <Text variant="muted" className="text-[10px] uppercase">
                           Current
                         </Text>
-                        <Text className="text-xs font-medium">{row.currentA.toFixed(2)} A</Text>
+                        <Text className="text-xs font-medium">
+                          {formatValueWithUnit(row.currentA, 2, 'A')}
+                        </Text>
                       </View>
                       <View>
                         <Text variant="muted" className="text-[10px] uppercase">
                           Temp
                         </Text>
-                        <Text className="text-xs font-medium">{row.temperatureC.toFixed(1)} °C</Text>
+                        <Text className="text-xs font-medium">
+                          {formatValueWithUnit(row.temperatureC, 1, '°C')}
+                        </Text>
                       </View>
                     </View>
 

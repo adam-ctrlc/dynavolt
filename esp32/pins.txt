@@ -1,0 +1,95 @@
+ESP32 DevKit (38 pin) on screw terminal breakout board
+Terminal labels as printed on the board, top to bottom, with the ESP32 pin they map to.
+
+LEFT STRIP
+----------
+Label   ESP32 pin       Notes
+3V3     3.3V out        Regulated 3.3V (white wire currently here)
+EN      EN              Reset, pull low to reset the chip
+SVP     GPIO36          Input only, no internal pull ups, ADC1_CH0
+SVN     GPIO39          Input only, ADC1_CH3
+P34     GPIO34          Input only, ADC1_CH6
+P35     GPIO35          Input only, ADC1_CH7
+P32     GPIO32          Free, ADC1_CH4, touch
+P33     GPIO33          Free, ADC1_CH5, touch
+P25     GPIO25          Free, DAC1, ADC2
+P26     GPIO26          Free, DAC2, ADC2
+P27     GPIO27          Free, ADC2, touch
+P14     GPIO14          Free, ADC2 (HSPI CLK)
+P12     GPIO12          Strapping pin, must be low at boot, avoid outputs that pull high
+GND     Ground          (brown wire currently here)
+P13     GPIO13          Free, ADC2 (HSPI MOSI)
+SD2     GPIO9           Internal flash, never use
+SD3     GPIO10          Internal flash, never use
+CMD     GPIO11          Internal flash, never use (printed blurry, position is CMD)
+5V      5V (VIN)        5V from USB, or 5V input when powered externally
+
+RIGHT STRIP
+-----------
+Label   ESP32 pin       Notes
+GND     Ground
+P23     GPIO23          Free (VSPI MOSI)
+P22     GPIO22          Free, common I2C SCL
+TX      GPIO1 (TX0)     USB serial log output, avoid
+RX      GPIO3 (RX0)     USB serial input, avoid
+P21     GPIO21          Free, common I2C SDA
+GND     Ground
+P19     GPIO19          Free (VSPI MISO)
+P18     GPIO18          Free (VSPI CLK)
+P5      GPIO5           Strapping pin, usable (VSPI CS)
+P17     GPIO17 (TX2)    Free, hardware UART2 TX
+P16     GPIO16 (RX2)    Free, hardware UART2 RX
+P4      GPIO4           Free, ADC2, touch
+P0      GPIO0           Boot strapping pin, avoid
+P2      GPIO2           Strapping pin, onboard LED, light use only
+P15     GPIO15          Strapping pin, usable, must be high at boot
+SD1     GPIO8           Internal flash, never use
+SD0     GPIO7           Internal flash, never use
+CLK     GPIO6           Internal flash, never use
+
+USABLE PINS
+-----------
+Label   ESP32 pin       Notes
+P21     GPIO21          Fully free
+P22     GPIO22          Fully free
+P23     GPIO23          Fully free
+P19     GPIO19          Fully free
+P18     GPIO18          Fully free
+P32     GPIO32          Fully free
+P33     GPIO33          Fully free
+P25     GPIO25          Fully free
+P26     GPIO26          Fully free
+P27     GPIO27          Fully free
+P14     GPIO14          Fully free
+P13     GPIO13          Fully free
+P4      GPIO4           Fully free, reserved here for the DHT22
+P16     GPIO16 (RX2)    Fully free, reserved here for the PZEM-004T
+P17     GPIO17 (TX2)    Fully free, reserved here for the PZEM-004T
+P5      GPIO5           With care, strapping, fine as an output after boot
+P15     GPIO15          With care, strapping, must be high at boot, fine after
+P2      GPIO2           With care, strapping, onboard LED, light use only
+SVP     GPIO36          Input only, good for analog sensors (ADC1)
+SVN     GPIO39          Input only, good for analog sensors (ADC1)
+P34     GPIO34          Input only, good for analog sensors (ADC1)
+P35     GPIO35          Input only, good for analog sensors (ADC1)
+
+RULES OF THUMB
+--------------
+Never touch: SD0, SD1, SD2, SD3, CLK, CMD (GPIO6 to GPIO11, wired to the module flash).
+Input only (no outputs, no pull ups): SVP (36), SVN (39), P34, P35.
+Strapping pins (state at boot matters): P0, P2, P5, P12, P15.
+ADC2 pins (25, 26, 27, 14, 12, 13, 4, 2, 15) cannot do analogRead while Wi-Fi is on; use ADC1 (32, 33, 34, 35, 36, 39) for analog sensors.
+
+DYNAVOLT WIRING PLAN
+--------------------
+PZEM-004T v3 (energy meter, UART):
+  PZEM TX  -> P16 (RX2)
+  PZEM RX  -> P17 (TX2)
+  PZEM 5V  -> 5V
+  PZEM GND -> GND
+  Note: PZEM TX idles at 5V on some modules; use a level shifter or divider into P16.
+
+DHT22 (temperature and humidity):
+  DATA -> P4 (10k pull up to 3V3)
+  VCC  -> 3V3
+  GND  -> GND

@@ -8,28 +8,32 @@ use crate::settings::model::Settings;
 
 /// Opens alerts for any threshold the reading crosses.
 pub async fn evaluate(pool: &PgPool, reading: &Reading, settings: &Settings) -> AppResult<()> {
-    if reading.apparent_power_va >= settings.load_threshold_va {
-        raise(
-            pool,
-            reading.id,
-            KIND_OVERLOAD,
-            &format!("Load reached {:.0} VA", reading.apparent_power_va),
-            reading.apparent_power_va,
-            settings.load_threshold_va,
-        )
-        .await?;
+    if let Some(apparent) = reading.apparent_power_va {
+        if apparent >= settings.load_threshold_va {
+            raise(
+                pool,
+                reading.id,
+                KIND_OVERLOAD,
+                &format!("Load reached {apparent:.0} VA"),
+                apparent,
+                settings.load_threshold_va,
+            )
+            .await?;
+        }
     }
 
-    if reading.temperature_c >= settings.temp_threshold_c {
-        raise(
-            pool,
-            reading.id,
-            KIND_TEMPERATURE,
-            &format!("Temperature reached {:.1} °C", reading.temperature_c),
-            reading.temperature_c,
-            settings.temp_threshold_c,
-        )
-        .await?;
+    if let Some(temperature) = reading.temperature_c {
+        if temperature >= settings.temp_threshold_c {
+            raise(
+                pool,
+                reading.id,
+                KIND_TEMPERATURE,
+                &format!("Temperature reached {temperature:.1} °C"),
+                temperature,
+                settings.temp_threshold_c,
+            )
+            .await?;
+        }
     }
 
     Ok(())

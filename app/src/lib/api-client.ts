@@ -35,7 +35,16 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   }
 
   const text = await response.text();
-  const payload = text ? (JSON.parse(text) as unknown) : null;
+  // A 5xx from Vercel can be an HTML error page, not JSON; treat any body we
+  // cannot parse as null so the !ok path falls through to its status message.
+  let payload: unknown = null;
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = null;
+    }
+  }
 
   if (!response.ok) {
     const message =

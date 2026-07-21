@@ -39,9 +39,9 @@ pub fn at(unix_ms: i64) -> ReadingInput {
     let humidity_pct = (60.0 + 8.0 * (t / 61.0).sin()).clamp(0.0, 100.0);
 
     ReadingInput {
-        voltage_v,
-        current_a,
-        temperature_c,
+        voltage_v: Some(voltage_v),
+        current_a: Some(current_a),
+        temperature_c: Some(temperature_c),
         power_w: Some(power_w),
         power_factor: Some(power_factor),
         frequency_hz: Some(frequency_hz),
@@ -68,7 +68,9 @@ mod tests {
     fn real_power_never_exceeds_apparent_power() {
         for step in 0..500 {
             let input = at(ENERGY_EPOCH_MS + step * 997);
-            let apparent = input.voltage_v * input.current_a;
+            let voltage = input.voltage_v.expect("simulator always reports voltage");
+            let current = input.current_a.expect("simulator always reports current");
+            let apparent = voltage * current;
             let real = input.power_w.expect("simulator always reports power");
 
             assert!(real <= apparent + 1e-6, "P {real} exceeded S {apparent}");

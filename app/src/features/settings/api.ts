@@ -1,19 +1,22 @@
+import type { Settings, SourceMode } from '@/features/settings/types';
 import { request } from '@/lib/api-client';
 
-export type Thresholds = {
-  loadThresholdVa: number;
-  tempThresholdC: number;
-  updatedAt: string;
-};
-
 export function read(token: string) {
-  return request<Thresholds>('/settings', { token });
+  return request<Settings>('/settings', { token });
 }
 
 export function update(token: string, loadThresholdVa: number, tempThresholdC: number) {
-  return request<Thresholds>('/settings', {
+  return request<Settings>('/settings', {
     method: 'PUT',
     token,
     body: { loadThresholdVa, tempThresholdC },
+  });
+}
+
+export function setSourceMode(token: string, mode: SourceMode) {
+  return request<Settings>('/settings/source', {
+    method: 'PUT',
+    token,
+    body: { sourceMode: mode },
   });
 }

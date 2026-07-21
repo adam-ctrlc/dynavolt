@@ -33,10 +33,10 @@ async fn register(
 
 async fn unregister(
     State(state): State<AppState>,
-    _auth: AuthUser,
+    auth: AuthUser,
     Json(body): Json<RegisterToken>,
 ) -> AppResult<StatusCode> {
-    service::unregister(&state.pool, &body.token).await?;
+    service::unregister(&state.pool, &body.token, auth.id).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
