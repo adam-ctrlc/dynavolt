@@ -161,8 +161,12 @@ class Monitor {
   }
 
   void showLcd() {
+    // Line 2 shows the live status and the thresholds it is judged against, so a
+    // change made in the app is visible on the board. Compact `load/tempC` keeps it
+    // within 16 columns even at the longest status word, OVERLOAD.
     String line1 = "T:" + Lcd::formatFloat(temperature, 1) + "C VA:" + Lcd::formatFloat(apparentPower, 0);
-    String line2 = String(statusName()) + " relay:" + (relay.isClosed() ? "ON" : "OFF");
+    String line2 = String(statusName()) + " " + String((int)vaLimit) + "/" +
+                   String((int)tempLimit) + "C";
     lcd.show(line1, line2);
   }
 
