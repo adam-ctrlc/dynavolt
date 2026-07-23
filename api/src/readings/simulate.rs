@@ -36,8 +36,6 @@ pub fn at(unix_ms: i64) -> ReadingInput {
     let hours_since_epoch = ((unix_ms - ENERGY_EPOCH_MS).max(0) as f64) / 3_600_000.0;
     let energy_kwh = hours_since_epoch * MEAN_POWER_KW;
 
-    let humidity_pct = (60.0 + 8.0 * (t / 61.0).sin()).clamp(0.0, 100.0);
-
     ReadingInput {
         voltage_v: Some(voltage_v),
         current_a: Some(current_a),
@@ -46,7 +44,6 @@ pub fn at(unix_ms: i64) -> ReadingInput {
         power_factor: Some(power_factor),
         frequency_hz: Some(frequency_hz),
         energy_kwh: Some(energy_kwh),
-        humidity_pct: Some(humidity_pct),
     }
 }
 

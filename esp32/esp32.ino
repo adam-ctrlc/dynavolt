@@ -1,53 +1,40 @@
-#define MODE_DS18B20_TEST 1
-#define MODE_NET_TEST 2
-#define MODE_MAIN 3
+// 1 = real firmware (src/core/Main.h): relay on, reads temp + PZEM, posts to the app.
+// 0 = run the TEST_MODE picked below instead.
+#define REAL_MODE 1
 
-#define ACTIVE_MODE MODE_NET_TEST
+#define TEST_DS18B20 1
+#define TEST_NET 2
+#define TEST_LCD 3
+#define TEST_PZEM 4
+#define TEST_MODE TEST_NET
 
-#if ACTIVE_MODE == MODE_DS18B20_TEST
+#if REAL_MODE
 
-#include "tests/ds18b20_test.h"
-
-void setup() {
-  ds18b20TestSetup();
-}
-
-void loop() {
-  ds18b20TestLoop();
-}
-
-#elif ACTIVE_MODE == MODE_NET_TEST
-
-#include "tests/net_test.h"
-
-void setup() {
-  netTestSetup();
-}
-
-void loop() {
-  netTestLoop();
-}
+#include "src/core/Main.h"
+Main runner;
 
 #else
 
-#include "functions/main.h"
-#include "tests/test.h"
+#if TEST_MODE == TEST_DS18B20
+#include "src/tests/Ds18b20Test.h"
+Ds18b20Test runner;
+#elif TEST_MODE == TEST_LCD
+#include "src/tests/LcdTest.h"
+LcdTest runner;
+#elif TEST_MODE == TEST_PZEM
+#include "src/tests/PzemTest.h"
+PzemTest runner;
+#else
+#include "src/tests/NetTest.h"
+NetTest runner;
+#endif
 
-bool relayTestMode = true;
+#endif
 
 void setup() {
-  Serial.begin(115200);
-  hardwareSetup();
+  runner.begin();
 }
 
 void loop() {
-  unsigned long now = millis();
-
-  if (relayTestMode) {
-    testLoop(now);
-  } else {
-    mainLoop(now);
-  }
+  runner.loop();
 }
-
-#endif

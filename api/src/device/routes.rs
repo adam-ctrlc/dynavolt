@@ -5,7 +5,7 @@ use axum::{Json, Router};
 use serde_json::{Map, Value};
 
 use crate::auth::extract::{AdminUser, AuthUser, DeviceAuth};
-use crate::device::model::{ConnectionEvent, DeviceStatus, NetworkInput, WifiNetwork};
+use crate::device::model::{DeviceStatus, Heartbeat, NetworkInput, WifiNetwork};
 use crate::device::service;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
@@ -21,10 +21,10 @@ const CONFIG_MAX: usize = 5;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/status", get(status))
-        .route("/history", get(history))
+        .route("/heartbeat", post(heartbeat))
         .route("/config", get(config))
         .route("/networks", get(networks).post(add_network))
-        .route("/networks/{id}", delete(delete_network))
+        .route("/networks/{id}", delete(delete_network).put(update_network))
         .route("/networks/{id}/select", put(select_network))
         .route("/networks/register-default", post(register_default))
 }
@@ -66,11 +66,15 @@ async fn status(State(state): State<AppState>, _auth: AuthUser) -> AppResult<Jso
     Ok(Json(service::status(&state.pool).await?))
 }
 
-async fn history(
+/// Device only: the firmware self-reports its identity and link telemetry here.
+async fn heartbeat(
     State(state): State<AppState>,
-    _auth: AuthUser,
-) -> AppResult<Json<Vec<ConnectionEvent>>> {
-    Ok(Json(service::history(&state.pool).await?))
+    _device: DeviceAuth,
+    Json(body): Json<Heartbeat>,
+) -> AppResult<StatusCode> {
+    service::record_heartbeat(&state.pool, &body).await?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Admin only: the response carries the passphrases in clear text.
@@ -101,6 +105,19 @@ async fn delete_network(
     service::delete_network(&state.pool, id).await?;
 
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Edits a stored network's credentials. The default is refused in the service; a
+/// bumped `updated_at` is the signal the board watches to re-sync.
+async fn update_network(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<i64>,
+    Json(body): Json<NetworkInput>,
+) -> AppResult<Json<WifiNetwork>> {
+    validate_network(&body)?;
+
+    Ok(Json(service::update_network(&state.pool, id, &body).await?))
 }
 
 /// No online guard: with list failover the board picks up the new priority at its

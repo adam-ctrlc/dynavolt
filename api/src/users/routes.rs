@@ -10,7 +10,7 @@ use crate::error::{AppError, AppResult};
 use crate::search;
 use crate::state::AppState;
 use crate::users::model::{
-    CreateUser, SuggestUsername, User, UsernameSuggestion, clean_username,
+    CreateUser, SuggestUsername, UpdateUser, User, UsernameSuggestion, clean_username,
 };
 use crate::users::service;
 
@@ -34,7 +34,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list).post(create))
         .route("/username-suggestion", get(username_suggestion))
-        .route("/{id}", axum::routing::delete(remove))
+        .route("/{id}", axum::routing::delete(remove).put(update))
 }
 
 async fn list(
@@ -132,6 +132,48 @@ async fn create(
     service::create(&state.pool, &body).await?;
 
     Ok(StatusCode::CREATED)
+}
+
+async fn update(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<UpdateUser>,
+) -> AppResult<Json<User>> {
+    if !body.email.contains('@') {
+        return Err(AppError::BadRequest("invalid email".to_owned()));
+    }
+    if body.first_name.trim().is_empty() {
+        return Err(AppError::BadRequest("first name is required".to_owned()));
+    }
+    if body.last_name.trim().is_empty() {
+        return Err(AppError::BadRequest("last name is required".to_owned()));
+    }
+    if let Some(password) = body.password.as_deref()
+        && !password.is_empty()
+        && password.len() < 8
+    {
+        return Err(AppError::BadRequest(
+            "password must be at least 8 characters".to_owned(),
+        ));
+    }
+
+    // NotFound before the role guard, so a missing id never reads as a role error.
+    let current_role: String = sqlx::query_scalar("select role from users where id = $1")
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    if admin.0.id == id && body.role.as_str() != current_role {
+        return Err(AppError::BadRequest(
+            "you cannot change your own role".to_owned(),
+        ));
+    }
+
+    let user = service::update(&state.pool, id, &body).await?;
+
+    Ok(Json(user))
 }
 
 async fn remove(

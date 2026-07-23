@@ -9,7 +9,7 @@ use crate::auth::extract::AuthUser;
 use crate::auth::{Role, jwt, password};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
-use crate::users::model::clean_optional;
+use crate::users::model::{clean_optional, clean_username};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,6 +94,10 @@ pub struct UpdateProfile {
     #[serde(default)]
     pub middle_name: Option<String>,
     pub last_name: String,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub username: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -162,9 +166,52 @@ async fn me(State(state): State<AppState>, auth: AuthUser) -> AppResult<Json<Use
     Ok(Json(UserResponse::from_credentials(found, role)))
 }
 
-/// Updates the caller's own name. Email and role are deliberately not editable
-/// here: email is the login identity, and letting an account raise its own role
-/// would defeat the point of having roles.
+/// Resolves the email bind for a profile update. `None` leaves it unchanged. Names
+/// aside, a non-admin may not change their login identity, so a differing value is
+/// refused; an admin gets the trimmed lowercase form after an `@` check.
+fn resolve_email(
+    is_admin: bool,
+    provided: Option<&str>,
+    current: &str,
+) -> AppResult<Option<String>> {
+    let Some(raw) = provided else {
+        return Ok(None);
+    };
+    let normalized = raw.trim().to_lowercase();
+
+    match is_admin {
+        false if normalized == current => Ok(None),
+        false => Err(AppError::Forbidden),
+        true if normalized.contains('@') => Ok(Some(normalized)),
+        true => Err(AppError::BadRequest("Invalid email".to_owned())),
+    }
+}
+
+/// Resolves the username bind for a profile update. `None` leaves it unchanged. A
+/// non-admin may not change it, so a differing value is refused; an admin gets the
+/// cleaned form and an empty result is rejected.
+fn resolve_username(
+    is_admin: bool,
+    provided: Option<&str>,
+    current: &str,
+) -> AppResult<Option<String>> {
+    let Some(raw) = provided else {
+        return Ok(None);
+    };
+    let cleaned = clean_username(raw);
+
+    match is_admin {
+        false if cleaned == current => Ok(None),
+        false => Err(AppError::Forbidden),
+        true if cleaned.is_empty() => Err(AppError::BadRequest("Username is required".to_owned())),
+        true => Ok(Some(cleaned)),
+    }
+}
+
+/// Updates the caller's own profile. Names are always editable. Email and username
+/// are the login identity: a standard user may not change them, but an admin may.
+/// Role stays fixed here, since letting an account raise its own role would defeat
+/// the point of having roles.
 async fn update_me(
     State(state): State<AppState>,
     auth: AuthUser,
@@ -177,11 +224,22 @@ async fn update_me(
         return Err(AppError::BadRequest("Last name is required".to_owned()));
     }
 
+    let current = sqlx::query_as::<_, Credentials>(credentials_select!("id = $1"))
+        .bind(auth.id)
+        .fetch_optional(&state.pool)
+        .await?
+        .ok_or(AppError::NotFound)?;
+
+    let is_admin = auth.role.is_admin();
+    let email = resolve_email(is_admin, body.email.as_deref(), &current.email)?;
+    let username = resolve_username(is_admin, body.username.as_deref(), &current.username)?;
+
     // RETURNING reflects the new values, so full_name is composed post-update.
     let found = sqlx::query_as::<_, Credentials>(
         "update users
-         set first_name = $1, middle_name = $2, last_name = $3
-         where id = $4
+         set first_name = $1, middle_name = $2, last_name = $3,
+             email = coalesce($4, email), username = coalesce($5, username)
+         where id = $6
          returning id, email, username, password_hash, role,
                    first_name, middle_name, last_name,
                    trim(concat_ws(' ', first_name, middle_name, last_name)) as full_name",
@@ -189,6 +247,8 @@ async fn update_me(
     .bind(body.first_name.trim())
     .bind(clean_optional(body.middle_name.as_deref()))
     .bind(body.last_name.trim())
+    .bind(email)
+    .bind(username)
     .bind(auth.id)
     .fetch_optional(&state.pool)
     .await?

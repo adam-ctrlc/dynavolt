@@ -1,5 +1,4 @@
 import { useColorScheme } from 'nativewind';
-import Drop from 'phosphor-react-native/src/icons/Drop';
 import Info from 'phosphor-react-native/src/icons/Info';
 import Lightning from 'phosphor-react-native/src/icons/Lightning';
 import Palette from 'phosphor-react-native/src/icons/Palette';
@@ -205,14 +204,6 @@ export default function DashboardScreen() {
             value={formatValue(data ? data.temperatureC : undefined, 1)}
             unit="°C"
             iconColor={hot ? danger : ac}
-          />
-          <MetricCard
-            className="flex-1"
-            icon={Drop}
-            label="Humidity"
-            value={formatValue(data ? data.humidityPct : undefined, 0)}
-            unit="%"
-            iconColor={ac}
           />
         </View>
 

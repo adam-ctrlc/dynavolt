@@ -38,13 +38,13 @@ export type Preset = {
 };
 
 export const DEFAULT_APPEARANCE = {
-  primary: AC_COLORS[0],
-  accent: ACCENTS[0],
+  primary: AC_COLORS[1],
+  accent: ACCENTS[2],
   background: BACKGROUNDS[0],
 };
 
 export const PRESETS: Preset[] = [
-  { label: 'Default', primary: AC_COLORS[0], accent: ACCENTS[0], background: BACKGROUNDS[0] },
+  { label: 'Default', primary: AC_COLORS[1], accent: ACCENTS[2], background: BACKGROUNDS[0] },
   { label: 'Ocean', recommended: true, primary: AC_COLORS[1], accent: ACCENTS[2], background: BACKGROUNDS[3] },
   { label: 'Sunset', recommended: true, primary: AC_COLORS[4], accent: ACCENTS[3], background: BACKGROUNDS[2] },
   { label: 'Grape', recommended: true, primary: AC_COLORS[2], accent: ACCENTS[1], background: BACKGROUNDS[1] },

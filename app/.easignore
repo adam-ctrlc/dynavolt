@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+.expo-shared/
+ios/
+android/
+dist/
+web-build/
+.git/
+*.apk
+*.aab
+*.log

@@ -32,10 +32,10 @@ pub async fn record(pool: &PgPool, input: ReadingInput, source: &str) -> AppResu
     let reading = sqlx::query_as::<_, Reading>(
         "insert into readings
             (voltage_v, current_a, temperature_c, apparent_power_va, status, source,
-             power_w, power_factor, frequency_hz, energy_kwh, humidity_pct)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             power_w, power_factor, frequency_hz, energy_kwh)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          returning id, voltage_v, current_a, temperature_c, apparent_power_va, status, source,
-                   power_w, power_factor, frequency_hz, energy_kwh, humidity_pct, recorded_at",
+                   power_w, power_factor, frequency_hz, energy_kwh, recorded_at",
     )
     .bind(input.voltage_v)
     .bind(input.current_a)
@@ -47,7 +47,6 @@ pub async fn record(pool: &PgPool, input: ReadingInput, source: &str) -> AppResu
     .bind(input.power_factor)
     .bind(input.frequency_hz)
     .bind(input.energy_kwh)
-    .bind(input.humidity_pct)
     .fetch_one(pool)
     .await?;
 
@@ -74,7 +73,6 @@ fn input_from(reading: &Reading) -> ReadingInput {
         power_factor: reading.power_factor,
         frequency_hz: reading.frequency_hz,
         energy_kwh: reading.energy_kwh,
-        humidity_pct: reading.humidity_pct,
     }
 }
 
@@ -91,12 +89,12 @@ pub async fn live(pool: &PgPool, sample_interval_ms: i64) -> AppResult<LiveReadi
 
     let (input, recorded_at, simulated, connected) = match settings.source_mode.as_str() {
         "hardware" => match latest_hardware(pool).await? {
-            Some(reading) => {
-                let recorded_at = reading.recorded_at;
-                let connected = is_within_connected_window(recorded_at, now);
-                (input_from(&reading), recorded_at, false, connected)
+            // A stale or absent hardware reading reads as no data rather than the last
+            // value, so the dashboard shows nothing until the board reports again.
+            Some(reading) if is_within_connected_window(reading.recorded_at, now) => {
+                (input_from(&reading), reading.recorded_at, false, true)
             }
-            None => (ReadingInput::empty(), now, false, false),
+            _ => (ReadingInput::empty(), now, false, false),
         },
         _ => {
             let input = simulate::at(now.timestamp_millis());
@@ -126,7 +124,6 @@ pub async fn live(pool: &PgPool, sample_interval_ms: i64) -> AppResult<LiveReadi
         power_factor: input.power_factor,
         frequency_hz: input.frequency_hz,
         energy_kwh: input.energy_kwh,
-        humidity_pct: input.humidity_pct,
         reactive_power_var: model::reactive_power(apparent_power_va, input.power_w),
         headroom_va: apparent_power_va.map(|apparent| settings.load_threshold_va - apparent),
         recorded_at,
@@ -138,7 +135,7 @@ pub async fn live(pool: &PgPool, sample_interval_ms: i64) -> AppResult<LiveReadi
 pub async fn latest(pool: &PgPool) -> AppResult<Option<Reading>> {
     let reading = sqlx::query_as::<_, Reading>(
         "select id, voltage_v, current_a, temperature_c, apparent_power_va, status, source,
-                power_w, power_factor, frequency_hz, energy_kwh, humidity_pct, recorded_at
+                power_w, power_factor, frequency_hz, energy_kwh, recorded_at
          from readings order by recorded_at desc limit 1",
     )
     .fetch_optional(pool)
@@ -150,7 +147,7 @@ pub async fn latest(pool: &PgPool) -> AppResult<Option<Reading>> {
 pub async fn latest_hardware(pool: &PgPool) -> AppResult<Option<Reading>> {
     let reading = sqlx::query_as::<_, Reading>(
         "select id, voltage_v, current_a, temperature_c, apparent_power_va, status, source,
-                power_w, power_factor, frequency_hz, energy_kwh, humidity_pct, recorded_at
+                power_w, power_factor, frequency_hz, energy_kwh, recorded_at
          from readings where source = 'hardware' order by recorded_at desc limit 1",
     )
     .fetch_optional(pool)

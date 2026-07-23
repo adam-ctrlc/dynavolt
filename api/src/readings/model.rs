@@ -63,8 +63,6 @@ pub struct ReadingInput {
     pub frequency_hz: Option<f64>,
     #[serde(default)]
     pub energy_kwh: Option<f64>,
-    #[serde(default)]
-    pub humidity_pct: Option<f64>,
 }
 
 impl ReadingInput {
@@ -79,7 +77,6 @@ impl ReadingInput {
             power_factor: None,
             frequency_hz: None,
             energy_kwh: None,
-            humidity_pct: None,
         }
     }
 
@@ -94,7 +91,6 @@ impl ReadingInput {
             power_factor: None,
             frequency_hz: None,
             energy_kwh: None,
-            humidity_pct: None,
         }
     }
 }
@@ -113,7 +109,6 @@ pub struct Reading {
     pub power_factor: Option<f64>,
     pub frequency_hz: Option<f64>,
     pub energy_kwh: Option<f64>,
-    pub humidity_pct: Option<f64>,
     pub recorded_at: DateTime<Utc>,
 }
 
@@ -137,7 +132,6 @@ pub struct LiveReading {
     pub power_factor: Option<f64>,
     pub frequency_hz: Option<f64>,
     pub energy_kwh: Option<f64>,
-    pub humidity_pct: Option<f64>,
     /// Q = sqrt(S^2 - P^2). Present only when real power is, since it cannot be
     /// recovered from apparent power alone.
     pub reactive_power_var: Option<f64>,

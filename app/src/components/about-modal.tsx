@@ -50,14 +50,14 @@ export function AboutModal({ visible, onClose }: { visible: boolean; onClose: ()
   const danger = colorScheme === 'dark' ? '#f87171' : '#dc2626';
 
   return (
-    <BottomSheet visible={visible} title="About DynaVolt" onClose={onClose}>
+    <BottomSheet visible={visible} title="About VITAL" onClose={onClose}>
       <Section icon={Lightning} title="What this app is for" color={ac}>
         It watches a 1 KVA distribution transformer and shows its voltage, current, temperature
         and load as they happen, so problems are noticed before something fails.
       </Section>
 
       <Section icon={Bell} title="Why it matters" color={danger}>
-        An overloaded or overheating transformer can fail without warning. DynaVolt raises an
+        An overloaded or overheating transformer can fail without warning. VITAL raises an
         alert the moment load reaches 900 VA or temperature reaches 40 °C, and records who
         responded and how quickly.
       </Section>

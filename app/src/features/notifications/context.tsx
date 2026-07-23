@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { Platform, Vibration } from 'react-native';
 
 import * as alertsApi from '@/features/alerts/api';
 import { useAuth } from '@/features/auth/context';
@@ -72,11 +73,12 @@ export function NotificationsProvider({
         // must stay silent.
         if (lastCount.current !== null && count > lastCount.current) {
           const raised = count - lastCount.current;
+          if (Platform.OS !== 'web') Vibration.vibrate([0, 400, 200, 400, 200, 600]);
           void notifyLocally(
             raised === 1 ? 'Transformer alert' : `${raised} transformer alerts`,
             raised === 1
-              ? 'A reading crossed a threshold. Open DynaVolt to acknowledge it.'
-              : 'Readings crossed the thresholds. Open DynaVolt to acknowledge them.'
+              ? 'A reading crossed a threshold. Open VITAL to acknowledge it.'
+              : 'Readings crossed the thresholds. Open VITAL to acknowledge them.'
           );
         }
         lastCount.current = count;

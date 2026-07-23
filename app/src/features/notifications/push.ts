@@ -32,12 +32,19 @@ export async function ensurePermission(): Promise<boolean> {
   // Android needs a channel before anything will surface, and `max` is what lets an
   // overload interrupt rather than sit silently in the tray.
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('alerts', {
+    // Android freezes a channel's settings once it exists, so a stronger vibration
+    // only takes effect under a fresh id; drop the old channel to keep the list clean.
+    await Notifications.setNotificationChannelAsync('alerts-v2', {
       name: 'Transformer alerts',
       importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
+      vibrationPattern: [0, 400, 200, 400, 200, 600],
       lightColor: '#ef4444',
     });
+    try {
+      await Notifications.deleteNotificationChannelAsync('alerts');
+    } catch {
+      // The old channel may already be gone on a fresh install; nothing to clean up.
+    }
   }
 
   const existing = await Notifications.getPermissionsAsync();

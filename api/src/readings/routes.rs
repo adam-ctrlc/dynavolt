@@ -71,8 +71,7 @@ async fn ingest(
         && body.power_w.is_none()
         && body.power_factor.is_none()
         && body.frequency_hz.is_none()
-        && body.energy_kwh.is_none()
-        && body.humidity_pct.is_none();
+        && body.energy_kwh.is_none();
     if empty {
         return Err(AppError::BadRequest(
             "at least one measurement is required".to_owned(),
@@ -86,11 +85,6 @@ async fn ingest(
     if body.power_factor.is_some_and(|pf| !(0.0..=1.0).contains(&pf)) {
         return Err(AppError::BadRequest(
             "power factor must be between 0 and 1".to_owned(),
-        ));
-    }
-    if body.humidity_pct.is_some_and(|h| !(0.0..=100.0).contains(&h)) {
-        return Err(AppError::BadRequest(
-            "humidity must be between 0 and 100 percent".to_owned(),
         ));
     }
     if body.energy_kwh.is_some_and(|e| e < 0.0) || body.frequency_hz.is_some_and(|f| f < 0.0) {
@@ -145,7 +139,7 @@ async fn history(
     // The searchable timestamp is rendered at UTC+8 so a query matches what the app shows.
     let rows = sqlx::query_as::<_, Reading>(
         "select id, voltage_v, current_a, temperature_c, apparent_power_va, status, source,
-                power_w, power_factor, frequency_hz, energy_kwh, humidity_pct, recorded_at
+                power_w, power_factor, frequency_hz, energy_kwh, recorded_at
          from readings
          where ($1::text is null or status = $1)
            and ($2::text is null

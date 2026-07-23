@@ -1,12 +1,11 @@
 export type Status = 'normal' | 'overload';
 
-/** Null whenever the reporting board has no PZEM or DHT to measure it. */
+/** Null whenever the reporting board has no PZEM to measure it. */
 type MeterFields = {
   powerW: number | null;
   powerFactor: number | null;
   frequencyHz: number | null;
   energyKwh: number | null;
-  humidityPct: number | null;
 };
 
 export type LiveReading = MeterFields & {

@@ -98,7 +98,7 @@ export default function LoginScreen() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 rounded-full"
-              accessibilityLabel="About DynaVolt"
+              accessibilityLabel="About VITAL"
               onPress={() => setShowAbout(true)}>
               <Info size={16} weight="bold" color={fg} />
             </Button>
@@ -123,7 +123,7 @@ export default function LoginScreen() {
             <View className="items-center gap-1">
               <Text className="text-2xl font-bold">Maligayang pagbabalik!</Text>
               <Text variant="muted" className="text-center text-sm">
-                DynaVolt is watching your 1 KVA transformer. Sign in to pick up where the
+                VITAL is watching your 1 KVA transformer. Sign in to pick up where the
                 readings left off.
               </Text>
             </View>

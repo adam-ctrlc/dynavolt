@@ -1,5 +1,5 @@
 import type { Role } from '@/features/auth/types';
-import type { ManagedUser, NewUser } from '@/features/users/types';
+import type { ManagedUser, NewUser, UpdateUser } from '@/features/users/types';
 import { request } from '@/lib/api-client';
 
 export type UserFilters = {
@@ -18,6 +18,10 @@ export function list(token: string, filters: UserFilters = {}, signal?: AbortSig
 
 export function create(token: string, user: NewUser) {
   return request<void>('/users', { method: 'POST', token, body: user });
+}
+
+export function update(token: string, id: string, user: UpdateUser) {
+  return request<ManagedUser>(`/users/${id}`, { method: 'PUT', token, body: user });
 }
 
 export function remove(token: string, id: string) {

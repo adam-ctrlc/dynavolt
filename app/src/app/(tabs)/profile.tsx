@@ -13,7 +13,7 @@ import SignOut from 'phosphor-react-native/src/icons/SignOut';
 import UserCircle from 'phosphor-react-native/src/icons/UserCircle';
 import X from 'phosphor-react-native/src/icons/X';
 import { useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppearanceModal } from '@/components/appearance-modal';
@@ -76,13 +76,21 @@ function Field({
   );
 }
 
-type NameDraft = { firstName: string; middleName: string; lastName: string };
+type NameDraft = {
+  firstName: string;
+  middleName: string;
+  lastName: string;
+  email: string;
+  username: string;
+};
 
 function draftOf(user: User | null): NameDraft {
   return {
     firstName: user?.firstName ?? '',
     middleName: user?.middleName ?? '',
     lastName: user?.lastName ?? '',
+    email: user?.email ?? '',
+    username: user?.username ?? '',
   };
 }
 
@@ -224,7 +232,13 @@ export default function ProfileScreen() {
   const dirty =
     draft.firstName !== current.firstName ||
     draft.middleName !== current.middleName ||
-    draft.lastName !== current.lastName;
+    draft.lastName !== current.lastName ||
+    (isAdmin && (draft.email !== current.email || draft.username !== current.username));
+
+  // Admins may edit the login identity, so it has to pass the same shape checks the
+  // server applies. Non-admins never send these, so they are always valid here.
+  const identityValid =
+    !isAdmin || (draft.email.trim().includes('@') && draft.username.trim().length > 0);
 
   function startEditing() {
     setDraft(draftOf(user));
@@ -247,6 +261,8 @@ export default function ProfileScreen() {
         firstName: draft.firstName.trim(),
         middleName: draft.middleName.trim() || null,
         lastName: draft.lastName.trim(),
+        // Only admins may change these; non-admins would get a 403, so leave them off.
+        ...(isAdmin ? { email: draft.email.trim(), username: draft.username.trim() } : {}),
       });
       // The header and greeting read from context, so they follow immediately.
       setUser(updated);
@@ -261,7 +277,10 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView className="bg-background flex-1" edges={['top']}>
-      <ScrollView contentContainerClassName="gap-4 p-4 pb-8">
+      <KeyboardAvoidingView className="flex-1" behavior="padding">
+      <ScrollView
+        contentContainerClassName="gap-4 p-4 pb-8"
+        keyboardShouldPersistTaps="handled">
         <View className="flex-row items-center gap-2">
           <UserCircle size={22} weight="fill" color={primary.hex} />
           <Text className="text-lg font-bold">Profile</Text>
@@ -305,21 +324,36 @@ export default function ProfileScreen() {
               the login identity and access level is an admin decision, so both stay
               read-only throughout. */}
           <CardContent className="gap-4 p-4">
-            <Field label="Email" hint="Not editable">
+            <Field label="Email" hint={isAdmin ? 'Used to sign in' : 'Not editable'}>
               <IconInput
                 icon={Envelope}
                 iconColor={primary.hex}
-                value={user?.email ?? ''}
-                editable={false}
+                value={isAdmin ? draft.email : (user?.email ?? '')}
+                onChangeText={
+                  isAdmin ? (email) => setDraft((prev) => ({ ...prev, email })) : undefined
+                }
+                editable={isAdmin && editing}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                placeholder="you@example.com"
               />
             </Field>
 
-            <Field label="Username" hint="Not editable">
+            <Field label="Username" hint={isAdmin ? 'Used to sign in' : 'Not editable'}>
               <IconInput
                 icon={At}
                 iconColor={primary.hex}
-                value={user?.username ?? ''}
-                editable={false}
+                value={isAdmin ? draft.username : (user?.username ?? '')}
+                onChangeText={
+                  isAdmin
+                    ? (username) => setDraft((prev) => ({ ...prev, username: username.toLowerCase() }))
+                    : undefined
+                }
+                editable={isAdmin && editing}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="username"
               />
             </Field>
 
@@ -374,7 +408,10 @@ export default function ProfileScreen() {
                   <X size={14} weight="bold" color={danger} />
                   <Text>Cancel</Text>
                 </Button>
-                <Button className="flex-1" disabled={busy || !dirty} onPress={() => void save()}>
+                <Button
+                  className="flex-1"
+                  disabled={busy || !dirty || !identityValid}
+                  onPress={() => void save()}>
                   <Check size={14} weight="bold" color={ON_PRIMARY} />
                   <Text>{busy ? 'Saving...' : 'Save changes'}</Text>
                 </Button>
@@ -406,9 +443,10 @@ export default function ProfileScreen() {
         </Button>
 
         <Text variant="muted" className="text-center text-[10px]">
-          DynaVolt, PHINMA Cagayan de Oro College
+          VITAL, PHINMA Cagayan de Oro College
         </Text>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <AppearanceModal visible={showAppearance} onClose={() => setShowAppearance(false)} />
       <ConfirmModal

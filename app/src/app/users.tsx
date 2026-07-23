@@ -10,6 +10,7 @@ import FunnelSimple from 'phosphor-react-native/src/icons/FunnelSimple';
 import HardHat from 'phosphor-react-native/src/icons/HardHat';
 import IdentificationCard from 'phosphor-react-native/src/icons/IdentificationCard';
 import Lock from 'phosphor-react-native/src/icons/Lock';
+import PencilSimple from 'phosphor-react-native/src/icons/PencilSimple';
 import Sparkle from 'phosphor-react-native/src/icons/Sparkle';
 import Trash from 'phosphor-react-native/src/icons/Trash';
 import UserPlus from 'phosphor-react-native/src/icons/UserPlus';
@@ -19,7 +20,7 @@ import UsersThree from 'phosphor-react-native/src/icons/UsersThree';
 import Wrench from 'phosphor-react-native/src/icons/Wrench';
 import X from 'phosphor-react-native/src/icons/X';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BottomSheet } from '@/components/bottom-sheet';
@@ -106,6 +107,7 @@ export default function UsersScreen() {
   const [rows, setRows] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<ManagedUser | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -138,8 +140,25 @@ export default function UsersScreen() {
   function cancel() {
     setDraft(EMPTY);
     setAdding(false);
+    setEditing(null);
     setReveal(false);
     setError(null);
+  }
+
+  function startEdit(row: ManagedUser) {
+    setDraft({
+      firstName: row.firstName,
+      middleName: row.middleName ?? '',
+      lastName: row.lastName,
+      username: row.username,
+      email: row.email,
+      password: '',
+      role: row.role,
+    });
+    setReveal(false);
+    setError(null);
+    setStatus(null);
+    setEditing(row);
   }
 
   async function generateUsername() {
@@ -188,6 +207,32 @@ export default function UsersScreen() {
     }
   }
 
+  async function saveEdit() {
+    if (!editing) return;
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const updated = await usersApi.update(token ?? '', editing.id, {
+        email: draft.email.trim(),
+        role: draft.role,
+        firstName: draft.firstName.trim(),
+        middleName: draft.middleName.trim() || null,
+        lastName: draft.lastName.trim(),
+        // Blank keeps the current username; blank keeps the current password.
+        username: draft.username.trim() || undefined,
+        password: draft.password || undefined,
+      });
+      setRows((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+      cancel();
+      setStatus(`Account updated for ${updated.email}`);
+    } catch (caught) {
+      setError((caught as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function remove() {
     if (!pendingDelete) return;
     const target = pendingDelete;
@@ -206,12 +251,27 @@ export default function UsersScreen() {
     }
   }
 
+  const isEditing = editing !== null;
+  const editingSelf = editing?.id === user?.id;
+
   const canSave =
     draft.firstName.trim().length > 0 &&
     draft.lastName.trim().length > 0 &&
     draft.email.trim().includes('@') &&
     draft.password.length >= MIN_PASSWORD &&
     !busy;
+
+  // When editing, the password is optional (blank keeps the current one), but any
+  // value given must still clear the minimum.
+  const canSaveEdit =
+    draft.firstName.trim().length > 0 &&
+    draft.lastName.trim().length > 0 &&
+    draft.email.trim().includes('@') &&
+    (draft.password.length === 0 || draft.password.length >= MIN_PASSWORD) &&
+    !busy;
+
+  const canSubmit = isEditing ? canSaveEdit : canSave;
+  const submit = isEditing ? saveEdit : save;
 
   // This screen sits outside the tabs group, so it cannot rely on that layout's
   // guard. The API enforces this too; the redirect just avoids a wall of 403s.
@@ -220,6 +280,7 @@ export default function UsersScreen() {
 
   return (
     <SafeAreaView className="bg-background flex-1" edges={['top']}>
+      <KeyboardAvoidingView className="flex-1" behavior="padding">
       <ScrollView contentContainerClassName="gap-4 p-4 pb-8" keyboardShouldPersistTaps="handled">
         <View className="flex-row items-center gap-2">
           <Button
@@ -249,7 +310,10 @@ export default function UsersScreen() {
           </CardContent>
         </Card>
 
-        <BottomSheet visible={adding} title="Add an account" onClose={cancel}>
+        <BottomSheet
+          visible={adding || isEditing}
+          title={isEditing ? 'Edit account' : 'Add an account'}
+          onClose={cancel}>
           <View className="gap-4">
             <Field label="First name">
                 <IconInput
@@ -318,7 +382,13 @@ export default function UsersScreen() {
                 />
               </Field>
 
-              <Field label="Password" hint={`${MIN_PASSWORD} characters or more`}>
+              <Field
+                label={isEditing ? 'New password' : 'Password'}
+                hint={
+                  isEditing
+                    ? 'Leave blank to keep the current password'
+                    : `${MIN_PASSWORD} characters or more`
+                }>
                 <IconInput
                   icon={Lock}
                   iconColor={primary.hex}
@@ -327,7 +397,7 @@ export default function UsersScreen() {
                   secureTextEntry={!reveal}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  placeholder="Their first password"
+                  placeholder={isEditing ? 'Leave blank to keep current' : 'Their first password'}
                   action={{
                     icon: reveal ? EyeSlash : Eye,
                     label: reveal ? 'Hide password' : 'Show password',
@@ -338,13 +408,18 @@ export default function UsersScreen() {
 
               <Field label="Role">
                 <Segmented
-                  options={ROLES}
+                  options={editingSelf ? ROLES.map((r) => ({ ...r, disabled: true })) : ROLES}
                   value={draft.role}
                   onChange={(role) => setDraft((p) => ({ ...p, role }))}
                   activeColor={primary.hex}
                   inactiveColor={muted}
                   className="self-start"
                 />
+                {editingSelf ? (
+                  <Text variant="muted" className="text-[10px]">
+                    You cannot change your own role.
+                  </Text>
+                ) : null}
               </Field>
 
               {error ? <Text className="text-destructive text-sm">{error}</Text> : null}
@@ -354,9 +429,11 @@ export default function UsersScreen() {
                   <X size={14} weight="bold" color={danger} />
                   <Text>Cancel</Text>
                 </Button>
-                <Button className="flex-1" disabled={!canSave} onPress={() => void save()}>
+                <Button className="flex-1" disabled={!canSubmit} onPress={() => void submit()}>
                   <Check size={14} weight="bold" color={ON_PRIMARY} />
-                  <Text numberOfLines={1}>{busy ? 'Saving...' : 'Create'}</Text>
+                  <Text numberOfLines={1}>
+                    {busy ? 'Saving...' : isEditing ? 'Save changes' : 'Create'}
+                  </Text>
                 </Button>
               </View>
           </View>
@@ -445,22 +522,34 @@ export default function UsersScreen() {
                       Added {formatDateTime(row.createdAt)}
                     </Text>
 
-                    {/* The API refuses this anyway; disabling it says so before the tap. */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={isSelf}
-                      onPress={() => setPendingDelete(row)}>
-                      <Trash size={14} weight="bold" color={isSelf ? muted : danger} />
-                      <Text style={{ color: isSelf ? muted : danger }}>
-                        {isSelf ? 'This is you' : 'Delete account'}
-                      </Text>
-                    </Button>
+                    <View className="flex-row gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onPress={() => startEdit(row)}>
+                        <PencilSimple size={14} weight="bold" color={primary.hex} />
+                        <Text>Edit</Text>
+                      </Button>
+                      {/* The API refuses this anyway; disabling it says so before the tap. */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        disabled={isSelf}
+                        onPress={() => setPendingDelete(row)}>
+                        <Trash size={14} weight="bold" color={isSelf ? muted : danger} />
+                        <Text style={{ color: isSelf ? muted : danger }}>
+                          {isSelf ? 'This is you' : 'Delete'}
+                        </Text>
+                      </Button>
+                    </View>
                   </CardContent>
                 </Card>
               );
             })}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <ConfirmModal
         visible={pendingDelete !== null}

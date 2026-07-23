@@ -33,6 +33,23 @@ pub struct CreateUser {
     pub username: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateUser {
+    pub email: String,
+    pub role: Role,
+    pub first_name: String,
+    #[serde(default)]
+    pub middle_name: Option<String>,
+    pub last_name: String,
+    /// Optional: a blank or absent value keeps the existing username.
+    #[serde(default)]
+    pub username: Option<String>,
+    /// Optional: a blank or absent value keeps the existing password.
+    #[serde(default)]
+    pub password: Option<String>,
+}
+
 /// Query for `GET /users/username-suggestion`.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

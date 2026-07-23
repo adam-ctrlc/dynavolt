@@ -1,7 +1,15 @@
 import { useColorScheme } from 'nativewind';
 import X from 'phosphor-react-native/src/icons/X';
 import { type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
@@ -29,7 +37,9 @@ export function BottomSheet({ visible, title, onClose, children }: BottomSheetPr
       animationType="slide"
       statusBarTranslucent
       onRequestClose={onClose}>
-      <View className="flex-1 justify-end">
+      <KeyboardAvoidingView
+        className="flex-1 justify-end"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable className="absolute inset-0 bg-black/50" accessibilityLabel="Close" onPress={onClose} />
         <View
           style={{ maxHeight: height * 0.85 }}
@@ -43,12 +53,13 @@ export function BottomSheet({ visible, title, onClose, children }: BottomSheetPr
           <ScrollView
             style={{ flexShrink: 1 }}
             contentContainerClassName="gap-5 px-5 pb-8 pt-1"
+            keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator
             persistentScrollbar>
             {children}
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

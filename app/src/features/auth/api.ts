@@ -16,6 +16,8 @@ export type ProfileUpdate = {
   firstName: string;
   middleName: string | null;
   lastName: string;
+  email?: string;
+  username?: string;
 };
 
 export function updateProfile(token: string, update: ProfileUpdate) {

@@ -1,30 +1,64 @@
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use sqlx::PgPool;
 
-use crate::device::model::{
-    ConnectionEvent, ConnectionEventKind, DeviceStatus, NetworkInput, WifiNetwork,
-};
+use crate::device::model::{DeviceStatus, Heartbeat, NetworkInput, WifiNetwork};
 use crate::error::{AppError, AppResult};
 use crate::readings::service as readings_service;
 use crate::settings::service as settings_service;
 use crate::time::local_label;
 
-/// Placeholder identity until the firmware reports its own.
-const DEVICE_ID: &str = "esp32-dynavolt-01";
-const FIRMWARE: &str = "0.1.0-placeholder";
-const IP_ADDRESS: &str = "192.168.1.42";
-const SIGNAL_DBM: i32 = -58;
-const UPTIME_SECONDS: i64 = 4 * 3600 + 12 * 60;
-
 /// The admin app may store at most this many networks. The board's own default can
 /// still be registered beyond it, so the ceiling applies only to operator adds.
 const MAX_NETWORKS: i64 = 5;
 
-/// Live link state. `connected` and the last-seen fields are driven by the newest
-/// hardware reading; `simulated` follows the settings source mode. The identity
-/// fields remain placeholders until the firmware reports them.
+type Telemetry = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<i32>,
+    Option<i64>,
+);
+
+/// Records a firmware heartbeat into the singleton telemetry row. Absent fields
+/// coalesce to the stored value, so a partial heartbeat never clears what it omits.
+pub async fn record_heartbeat(pool: &PgPool, heartbeat: &Heartbeat) -> AppResult<()> {
+    sqlx::query(
+        "update device_telemetry set
+             device_id = coalesce($1, device_id),
+             firmware = coalesce($2, firmware),
+             ssid = coalesce($3, ssid),
+             ip_address = coalesce($4, ip_address),
+             signal_dbm = coalesce($5, signal_dbm),
+             uptime_seconds = coalesce($6, uptime_seconds),
+             reported_at = now()
+         where id = 1",
+    )
+    .bind(&heartbeat.device_id)
+    .bind(&heartbeat.firmware)
+    .bind(&heartbeat.ssid)
+    .bind(&heartbeat.ip_address)
+    .bind(heartbeat.signal_dbm)
+    .bind(heartbeat.uptime_seconds)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Live link state. The identity fields come from the newest reported telemetry and
+/// are null until the firmware has reported in; `connected` and the last-seen fields
+/// are driven by the newest hardware reading; `simulated` follows the source mode.
 pub async fn status(pool: &PgPool) -> AppResult<DeviceStatus> {
-    let ssid = top_ssid(pool).await?;
+    let telemetry: Option<Telemetry> = sqlx::query_as(
+        "select device_id, firmware, ssid, ip_address, signal_dbm, uptime_seconds
+         from device_telemetry where id = 1",
+    )
+    .fetch_optional(pool)
+    .await?;
+    let (device_id, firmware, ssid, ip_address, signal_dbm, uptime_seconds) =
+        telemetry.unwrap_or((None, None, None, None, None, None));
+
     let settings = settings_service::load(pool).await?;
     let now = Utc::now();
 
@@ -42,49 +76,16 @@ pub async fn status(pool: &PgPool) -> AppResult<DeviceStatus> {
 
     Ok(DeviceStatus {
         connected,
-        device_id: DEVICE_ID.to_owned(),
-        firmware: FIRMWARE.to_owned(),
-        ip_address: Some(IP_ADDRESS.to_owned()),
-        signal_dbm: Some(SIGNAL_DBM),
-        uptime_seconds: Some(UPTIME_SECONDS),
+        device_id,
+        firmware,
+        ip_address,
+        signal_dbm,
+        uptime_seconds,
         ssid,
         last_seen_at,
         last_seen_label,
         simulated: settings.source_mode != "hardware",
     })
-}
-
-/// Hardcoded history, spaced relative to now so the list stays plausible as time
-/// passes instead of freezing at fixed dates.
-pub async fn history(pool: &PgPool) -> AppResult<Vec<ConnectionEvent>> {
-    let ssid = top_ssid(pool).await?;
-    let now = Utc::now();
-
-    let entries = [
-        (ConnectionEventKind::Connected, 9i64, "Link established"),
-        (ConnectionEventKind::Disconnected, 4 * 60 + 21, "Signal lost"),
-        (ConnectionEventKind::Connected, 5 * 60 + 2, "Link established"),
-        (ConnectionEventKind::Disconnected, 9 * 60 + 47, "Router rebooted"),
-        (ConnectionEventKind::Connected, 10 * 60 + 3, "Link established"),
-        (ConnectionEventKind::Disconnected, 26 * 60, "Power cycled"),
-    ];
-
-    Ok(entries
-        .into_iter()
-        .enumerate()
-        .map(|(index, (kind, minutes_ago, detail))| {
-            let at = now - Duration::minutes(minutes_ago);
-
-            ConnectionEvent {
-                id: index as i64 + 1,
-                kind,
-                detail: detail.to_owned(),
-                ssid: ssid.clone(),
-                at,
-                at_label: local_label(at),
-            }
-        })
-        .collect())
 }
 
 /// The stored networks in the board's failover priority: selected first, then the
@@ -100,15 +101,6 @@ pub async fn list_networks(pool: &PgPool) -> AppResult<Vec<WifiNetwork>> {
     .await?;
 
     Ok(rows)
-}
-
-/// The highest-priority network's ssid, or an empty string when none are stored.
-async fn top_ssid(pool: &PgPool) -> AppResult<String> {
-    Ok(list_networks(pool)
-        .await?
-        .into_iter()
-        .next()
-        .map_or_else(String::new, |network| network.ssid))
 }
 
 /// Adds an operator network. Neither default nor selected. Rejected once the cap is
@@ -168,6 +160,44 @@ pub async fn delete_network(pool: &PgPool, id: i64) -> AppResult<()> {
         .await?;
 
     Ok(())
+}
+
+/// Edits a stored network's ssid and password. The default is refused: it mirrors
+/// the board's compiled-in credentials, which only the firmware may re-register.
+/// Bumping `updated_at` is the change signal the board watches to re-sync and apply
+/// with try-then-revert. A duplicate ssid falls through to the 23505 -> 409 mapping.
+pub async fn update_network(pool: &PgPool, id: i64, input: &NetworkInput) -> AppResult<WifiNetwork> {
+    let existing = sqlx::query_as::<_, WifiNetwork>(
+        "select id, ssid, password, is_default, selected, updated_at
+         from wifi_networks where id = $1",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?;
+
+    match existing {
+        Some(network) if network.is_default => {
+            return Err(AppError::BadRequest(
+                "The default network cannot be edited".to_owned(),
+            ));
+        }
+        Some(_) => {}
+        None => return Err(AppError::NotFound),
+    }
+
+    let network = sqlx::query_as::<_, WifiNetwork>(
+        "update wifi_networks
+         set ssid = $1, password = $2, updated_at = now()
+         where id = $3
+         returning id, ssid, password, is_default, selected, updated_at",
+    )
+    .bind(input.ssid.trim())
+    .bind(&input.password)
+    .bind(id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(network)
 }
 
 /// Selects a network as preferred. The partial unique index forbids two selected

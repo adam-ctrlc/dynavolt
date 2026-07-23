@@ -8,7 +8,7 @@ import Thermometer from 'phosphor-react-native/src/icons/Thermometer';
 import Users from 'phosphor-react-native/src/icons/Users';
 import X from 'phosphor-react-native/src/icons/X';
 import { useCallback, useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { KeyboardAvoidingView, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DeviceCard } from '@/components/ac/device-card';
@@ -99,10 +99,6 @@ export default function SettingsScreen() {
 
     switch (next) {
       case 'hardware': {
-        if (!esp32Available) {
-          setError('ESP32 is not available. Turn on the board and wait for it to connect.');
-          return;
-        }
         setSourceMode('hardware');
         try {
           await settingsApi.setSourceMode(token ?? '', 'hardware');
@@ -130,14 +126,11 @@ export default function SettingsScreen() {
     setStatus('ESP32 connected');
   }
 
-  async function handleCancelSource() {
+  // Closing the waiting sheet keeps ESP32 mode: the simulation stays stopped and the
+  // dashboard shows "no data" until the board reports.
+  function handleDismissSource() {
     setConnecting(false);
-    setSourceMode('simulation');
-    try {
-      await settingsApi.setSourceMode(token ?? '', 'simulation');
-    } catch (caught) {
-      setError((caught as Error).message);
-    }
+    setStatus('On ESP32 mode. Waiting for the board to report.');
   }
 
   useEffect(() => {
@@ -190,7 +183,10 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView className="bg-background flex-1" edges={['top']}>
-      <ScrollView contentContainerClassName="gap-4 p-4 pb-8">
+      <KeyboardAvoidingView className="flex-1" behavior="padding">
+      <ScrollView
+        contentContainerClassName="gap-4 p-4 pb-8"
+        keyboardShouldPersistTaps="handled">
         <View className="flex-row items-center gap-2">
           <Gear size={22} weight="fill" color={primary.hex} />
           <Text className="text-lg font-bold">System Settings</Text>
@@ -289,11 +285,7 @@ export default function SettingsScreen() {
               <Skeleton className="h-11 w-full rounded-full" />
             ) : (
               <Segmented
-                options={SOURCE_OPTIONS.map((option) =>
-                  option.value === 'hardware'
-                    ? { ...option, disabled: !esp32Available }
-                    : option
-                )}
+                options={SOURCE_OPTIONS}
                 value={sourceMode}
                 onChange={(next) => void changeSource(next)}
                 activeColor={primary.hex}
@@ -331,12 +323,13 @@ export default function SettingsScreen() {
 
         <DeviceCard />
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <SourceModeModal
         visible={connecting}
         token={token}
         onSynced={handleSynced}
-        onCancel={() => void handleCancelSource()}
+        onCancel={handleDismissSource}
       />
     </SafeAreaView>
   );

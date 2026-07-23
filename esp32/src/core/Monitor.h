@@ -1,0 +1,180 @@
+#pragma once
+
+#include <Arduino.h>
+
+#include "../hardware/EnergyMeter.h"
+#include "../hardware/TemperatureProbe.h"
+#include "../hardware/Relay.h"
+#include "../hardware/Lcd.h"
+
+class Monitor {
+ public:
+  Monitor(EnergyMeter &meter, TemperatureProbe &probe, Relay &relay, Lcd &lcd)
+      : meter(meter), probe(probe), relay(relay), lcd(lcd) {}
+
+  struct Snapshot {
+    float voltage;
+    float current;
+    float power;
+    float energy;
+    float frequency;
+    float powerFactor;
+    float temperature;
+  };
+
+  void begin() {
+    lcd.begin();
+    relay.begin();
+    meter.begin();
+    probe.begin();
+  }
+
+  void loop(unsigned long now) {
+    if (!sampleDue(now)) return;
+
+    bool sensorsOk = sample();
+    updateStatus(now);
+    publish(sensorsOk);
+    showLcd();
+  }
+
+  Snapshot snapshot() const {
+    return {voltage, current, power, energy, frequency, powerFactor, temperature};
+  }
+
+ private:
+  enum Status { STATUS_NORMAL, STATUS_WARNING, STATUS_OVERLOAD };
+
+  static constexpr float VA_LIMIT = 900.0f;
+  static constexpr float VA_CLEAR = 850.0f;
+  static constexpr float TEMP_LIMIT = 40.0f;
+  static constexpr float TEMP_CLEAR = 37.0f;
+
+  static constexpr unsigned long SAMPLE_INTERVAL_MS = 1000;
+  static constexpr unsigned long TRIP_CONFIRM_MS = 3000;
+  static constexpr unsigned long RECLOSE_LOCKOUT_MS = 30000;
+
+  bool sampleDue(unsigned long now) {
+    if (now - lastSample < SAMPLE_INTERVAL_MS) return false;
+    lastSample = now;
+    return true;
+  }
+
+  bool sample() {
+    EnergyMeter::Reading r = meter.read();
+    voltage = r.voltage;
+    current = r.current;
+    power = r.power;
+    energy = r.energy;
+    frequency = r.frequency;
+    powerFactor = r.powerFactor;
+
+    temperature = probe.read();
+
+    if (isnan(voltage) || isnan(current)) {
+      apparentPower = NAN;
+      return false;
+    }
+
+    apparentPower = voltage * current;
+    return true;
+  }
+
+  bool overLimit() {
+    return (!isnan(apparentPower) && apparentPower >= VA_LIMIT) ||
+           (!isnan(temperature) && temperature >= TEMP_LIMIT);
+  }
+
+  bool belowClear() {
+    bool vaOk = isnan(apparentPower) || apparentPower <= VA_CLEAR;
+    bool tempOk = isnan(temperature) || temperature <= TEMP_CLEAR;
+    return vaOk && tempOk;
+  }
+
+  void updateStatus(unsigned long now) {
+    switch (status) {
+      case STATUS_NORMAL:
+        if (overLimit()) {
+          status = STATUS_WARNING;
+          abnormalSince = now;
+        }
+        break;
+
+      case STATUS_WARNING:
+        if (!overLimit()) {
+          status = STATUS_NORMAL;
+          abnormalSince = 0;
+        } else if (now - abnormalSince >= TRIP_CONFIRM_MS) {
+          status = STATUS_OVERLOAD;
+          trippedAt = now;
+        }
+        break;
+
+      case STATUS_OVERLOAD:
+        if (belowClear() && now - trippedAt >= RECLOSE_LOCKOUT_MS) {
+          status = STATUS_NORMAL;
+          abnormalSince = 0;
+        }
+        break;
+    }
+  }
+
+  const char *statusName() {
+    switch (status) {
+      case STATUS_OVERLOAD: return "OVERLOAD";
+      case STATUS_WARNING: return "WARNING";
+      default: return "NORMAL";
+    }
+  }
+
+  void publish(bool sensorsOk) {
+    Serial.print("{\"status\":\"");
+    Serial.print(statusName());
+    Serial.print("\",\"relay\":\"");
+    Serial.print(relay.isClosed() ? "CLOSED" : "OPEN");
+    Serial.print("\",\"sensor_ok\":");
+    Serial.print(sensorsOk ? "true" : "false");
+    Serial.print(",\"voltage_v\":");
+    Serial.print(voltage, 1);
+    Serial.print(",\"current_a\":");
+    Serial.print(current, 3);
+    Serial.print(",\"power_w\":");
+    Serial.print(power, 1);
+    Serial.print(",\"apparent_va\":");
+    Serial.print(apparentPower, 1);
+    Serial.print(",\"pf\":");
+    Serial.print(powerFactor, 2);
+    Serial.print(",\"frequency_hz\":");
+    Serial.print(frequency, 1);
+    Serial.print(",\"energy_kwh\":");
+    Serial.print(energy, 3);
+    Serial.print(",\"temperature_c\":");
+    Serial.print(temperature, 1);
+    Serial.println("}");
+  }
+
+  void showLcd() {
+    String line1 = "T:" + Lcd::formatFloat(temperature, 1) + "C VA:" + Lcd::formatFloat(apparentPower, 0);
+    String line2 = String(statusName()) + " relay:" + (relay.isClosed() ? "ON" : "OFF");
+    lcd.show(line1, line2);
+  }
+
+  EnergyMeter &meter;
+  TemperatureProbe &probe;
+  Relay &relay;
+  Lcd &lcd;
+
+  Status status = STATUS_NORMAL;
+  unsigned long lastSample = 0;
+  unsigned long abnormalSince = 0;
+  unsigned long trippedAt = 0;
+
+  float voltage = NAN;
+  float current = NAN;
+  float power = NAN;
+  float energy = NAN;
+  float frequency = NAN;
+  float powerFactor = NAN;
+  float apparentPower = NAN;
+  float temperature = NAN;
+};

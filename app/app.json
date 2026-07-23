@@ -1,21 +1,22 @@
 {
   "expo": {
-    "name": "DynaVolt",
+    "name": "VITAL",
     "slug": "dynavolt",
+    "owner": "peregrine.adrift",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/favicon.png",
     "scheme": "dynavolt",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/favicon.png",
+      "bundleIdentifier": "com.peregrineadrift.vital"
     },
     "android": {
+      "package": "com.peregrineadrift.vital",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#0B2545",
+        "foregroundImage": "./assets/images/favicon.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -29,8 +30,8 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "image": "./assets/images/favicon.png",
+          "imageWidth": 120
         }
       ],
       "expo-font",
@@ -39,14 +40,20 @@
       [
         "expo-notifications",
         {
-          "color": "#22c55e",
-          "defaultChannel": "alerts"
+          "color": "#208AEF",
+          "defaultChannel": "alerts-v2"
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2ea9033b-4165-466b-9b1e-8d01c60af1aa"
+      }
     }
   }
 }

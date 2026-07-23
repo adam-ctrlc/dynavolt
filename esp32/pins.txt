@@ -55,14 +55,14 @@ P22     GPIO22          Fully free
 P23     GPIO23          Fully free
 P19     GPIO19          Fully free
 P18     GPIO18          Fully free
-P32     GPIO32          Fully free
+P32     GPIO32          Fully free, reserved here for the DS18B20
 P33     GPIO33          Fully free
 P25     GPIO25          Fully free
 P26     GPIO26          Fully free
 P27     GPIO27          Fully free
-P14     GPIO14          Fully free
-P13     GPIO13          Fully free
-P4      GPIO4           Fully free, reserved here for the DHT22
+P14     GPIO14          Fully free, reserved here for the LCD I2C SCL
+P13     GPIO13          Fully free, reserved here for the LCD I2C SDA
+P4      GPIO4           Fully free
 P16     GPIO16 (RX2)    Fully free, reserved here for the PZEM-004T
 P17     GPIO17 (TX2)    Fully free, reserved here for the PZEM-004T
 P5      GPIO5           With care, strapping, fine as an output after boot
@@ -89,7 +89,18 @@ PZEM-004T v3 (energy meter, UART):
   PZEM GND -> GND
   Note: PZEM TX idles at 5V on some modules; use a level shifter or divider into P16.
 
-DHT22 (temperature and humidity):
-  DATA -> P4 (10k pull up to 3V3)
-  VCC  -> 3V3
-  GND  -> GND
+DS18B20 (temperature):
+  Yellow (DATA) -> P32
+  Red (VCC)     -> 3V3
+  Black (GND)   -> GND
+  Note: internal pull up on P32 (INPUT_PULLUP) drives the bus, no external resistor needed.
+
+16x2 I2C LCD (PCF8574 backpack):
+  VCC -> 5V
+  GND -> GND
+  SDA -> P13
+  SCL -> P14
+  Note: SDA/SCL are custom I2C pins set via Wire.begin(13, 14), chosen so the four
+        wires cluster next to the left-strip 5V and GND terminals for short runs.
+  Note: hd44780 auto-detects the backpack I2C address and register mapping and
+        drives whichever answers, so no address jumper guessing is needed.

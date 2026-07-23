@@ -22,3 +22,15 @@ export type NewUser = {
   /** Optional: the server generates one from the name when omitted. */
   username?: string;
 };
+
+export type UpdateUser = {
+  email: string;
+  role: Role;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  /** Optional: blank keeps the current username. */
+  username?: string;
+  /** Optional: blank keeps the current password. */
+  password?: string;
+};

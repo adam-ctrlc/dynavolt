@@ -2,7 +2,6 @@ import { useColorScheme } from 'nativewind';
 import type { IconProps } from 'phosphor-react-native';
 import Bell from 'phosphor-react-native/src/icons/Bell';
 import ChartLine from 'phosphor-react-native/src/icons/ChartLine';
-import Drop from 'phosphor-react-native/src/icons/Drop';
 import Gauge from 'phosphor-react-native/src/icons/Gauge';
 import Gear from 'phosphor-react-native/src/icons/Gear';
 import Lightning from 'phosphor-react-native/src/icons/Lightning';
@@ -94,7 +93,7 @@ function UsageTab({ isAdmin, colors }: { isAdmin: boolean; colors: Colors }) {
 
         <IconItem icon={Gauge} color={ac} title="Monitor">
           The live view. The big number is apparent power in VA, judged against the load
-          threshold. Below it are current, voltage, temperature and humidity, then the metering
+          threshold. Below it are current, voltage and temperature, then the metering
           panel.
         </IconItem>
 
@@ -114,7 +113,7 @@ function UsageTab({ isAdmin, colors }: { isAdmin: boolean; colors: Colors }) {
         {isAdmin ? (
           <IconItem icon={Gear} color={ac} title="Settings">
             Set the load and temperature thresholds every reading is judged against, and manage the
-            ESP32: its link state, connection history, and the Wi-Fi network it joins.
+            ESP32: its link state and live telemetry.
           </IconItem>
         ) : null}
 
@@ -161,8 +160,9 @@ function ReadingsTab({ colors }: { colors: Colors }) {
     <>
       <Text variant="muted" className="text-sm leading-5">
         Readings come from an ESP32 on the transformer: a PZEM-004T energy meter for the electrical
-        values and a DHT22 for temperature and humidity. Until the board is wired in, the server
-        simulates them, and they drift slightly over time like a real instrument.
+        values and a DS18B20 contact probe on the transformer body for temperature. Until the board
+        is wired in, the server simulates them, and they drift slightly over time like a real
+        instrument.
       </Text>
 
       <View className="gap-3">
@@ -209,10 +209,6 @@ function ReadingsTab({ colors }: { colors: Colors }) {
 
         <IconItem icon={Thermometer} color={danger} title="Temperature (C)">
           Transformer temperature. Its own threshold raises a separate alert from load.
-        </IconItem>
-
-        <IconItem icon={Drop} color={ac} title="Humidity (%)">
-          Ambient humidity, for thermal context alongside temperature.
         </IconItem>
       </View>
 

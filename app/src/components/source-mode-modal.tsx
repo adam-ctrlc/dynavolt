@@ -48,7 +48,7 @@ export function SourceModeModal({ visible, token, onSynced, onCancel }: SourceMo
   return (
     <BottomSheet
       visible={visible}
-      title={synced ? 'ESP32 connected' : 'Connecting to ESP32'}
+      title={synced ? 'ESP32 connected' : 'Waiting for ESP32'}
       onClose={onCancel}>
       {synced ? (
         <View className="items-center gap-4 py-6">
@@ -62,10 +62,11 @@ export function SourceModeModal({ visible, token, onSynced, onCancel }: SourceMo
         <View className="items-center gap-5 py-6">
           <ActivityIndicator size="large" color={primary.hex} />
           <Text variant="muted" className="text-center text-sm">
-            Waiting for the board to sync...
+            Now on ESP32 mode. The dashboard shows no data until the board reports. You can close
+            this and keep waiting.
           </Text>
           <Button variant="outline" className="w-full" onPress={onCancel}>
-            <Text>Cancel</Text>
+            <Text>Close</Text>
           </Button>
         </View>
       )}
