@@ -1,4 +1,4 @@
-DynaVolt ESP32 firmware layout
+VITAL ESP32 firmware layout
 Map of the Arduino sketch: what each file is for, how the modes map to runners,
 and the conventions that dictate the folder shape. Written for a human reader.
 
@@ -15,7 +15,7 @@ TREE
 esp32.ino                     Thin main: picks ACTIVE_MODE, instantiates one runner, delegates setup/loop.
 secrets.h                     Real Wi-Fi and backend credentials (gitignored, never committed).
 secrets.example.h             Template to copy to secrets.h; documents the four required defines.
-pins.txt                      Board terminal map and the DynaVolt wiring plan.
+pins.txt                      Board terminal map and the VITAL wiring plan.
 structure.txt                 This file.
 .gitignore                    Keeps secrets.h out of the repo.
 
@@ -29,7 +29,7 @@ src/hardware/
   Relay.h                     Single relay output with configurable active level, tracks closed/open state.
 
 src/net/
-  BackendClient.h             HTTPS call to the backend: postReading only.
+  BackendClient.h             HTTPS calls to the backend: postReading and postHeartbeat.
   WifiLink.h            Wi-Fi lifecycle: connects to the fixed compiled Wi-Fi with a bounded timeout.
 
 src/core/
@@ -85,7 +85,9 @@ WifiLink
 
 BackendClient
   Stateless HTTPS client for the backend, keyed by the x-device-key header. postReading(...) builds
-  a partial JSON body that omits any NAN field and POSTs it to /api/v1/readings.
+  a partial JSON body that omits any NAN field and POSTs it to /api/v1/readings. postHeartbeat()
+  reports device telemetry and reads the alarm thresholds back out of the response, which Main
+  persists to NVS and hands to Monitor so an operator threshold change reaches the board.
 
 Monitor
   Takes references to EnergyMeter, TemperatureProbe, Relay, and Lcd. begin() brings up all four.

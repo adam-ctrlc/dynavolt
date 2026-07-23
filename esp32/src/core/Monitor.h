@@ -42,13 +42,20 @@ class Monitor {
     return {voltage, current, power, energy, frequency, powerFactor, temperature};
   }
 
+  // Adopts operator thresholds (from the heartbeat). The clear points keep the
+  // defaults' hysteresis: ~6% below the load limit, 3 C below the temperature limit.
+  void setThresholds(float va, float temp) {
+    vaLimit = va;
+    tempLimit = temp;
+    vaClear = va * 0.94f;
+    tempClear = temp > 3.0f ? temp - 3.0f : temp * 0.9f;
+  }
+
+  float loadThreshold() const { return vaLimit; }
+  float tempThreshold() const { return tempLimit; }
+
  private:
   enum Status { STATUS_NORMAL, STATUS_WARNING, STATUS_OVERLOAD };
-
-  static constexpr float VA_LIMIT = 900.0f;
-  static constexpr float VA_CLEAR = 850.0f;
-  static constexpr float TEMP_LIMIT = 40.0f;
-  static constexpr float TEMP_CLEAR = 37.0f;
 
   static constexpr unsigned long SAMPLE_INTERVAL_MS = 1000;
   static constexpr unsigned long TRIP_CONFIRM_MS = 3000;
@@ -81,13 +88,13 @@ class Monitor {
   }
 
   bool overLimit() {
-    return (!isnan(apparentPower) && apparentPower >= VA_LIMIT) ||
-           (!isnan(temperature) && temperature >= TEMP_LIMIT);
+    return (!isnan(apparentPower) && apparentPower >= vaLimit) ||
+           (!isnan(temperature) && temperature >= tempLimit);
   }
 
   bool belowClear() {
-    bool vaOk = isnan(apparentPower) || apparentPower <= VA_CLEAR;
-    bool tempOk = isnan(temperature) || temperature <= TEMP_CLEAR;
+    bool vaOk = isnan(apparentPower) || apparentPower <= vaClear;
+    bool tempOk = isnan(temperature) || temperature <= tempClear;
     return vaOk && tempOk;
   }
 
@@ -168,6 +175,11 @@ class Monitor {
   unsigned long lastSample = 0;
   unsigned long abnormalSince = 0;
   unsigned long trippedAt = 0;
+
+  float vaLimit = 900.0f;
+  float vaClear = 850.0f;
+  float tempLimit = 40.0f;
+  float tempClear = 37.0f;
 
   float voltage = NAN;
   float current = NAN;

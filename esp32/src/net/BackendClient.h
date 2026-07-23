@@ -12,8 +12,17 @@ class BackendClient {
  public:
   BackendClient() = default;
 
-  void postHeartbeat() {
-    if (WiFi.status() != WL_CONNECTED) return;
+  // The heartbeat response carries the operator's alarm thresholds. NAN on either
+  // field (or a failed call) means "no update", so the board keeps what it had.
+  struct HeartbeatResult {
+    bool ok = false;
+    float loadThresholdVa = NAN;
+    float tempThresholdC = NAN;
+  };
+
+  HeartbeatResult postHeartbeat() {
+    HeartbeatResult result;
+    if (WiFi.status() != WL_CONNECTED) return result;
 
     String body = "{";
     body += "\"deviceId\":\"";
@@ -41,7 +50,15 @@ class BackendClient {
     int code = http.POST(body);
     Serial.print("POST /heartbeat -> ");
     Serial.println(code);
+    if (code >= 200 && code < 300) {
+      String response = http.getString();
+      result.ok = true;
+      result.loadThresholdVa = jsonNumber(response, "loadThresholdVa");
+      result.tempThresholdC = jsonNumber(response, "tempThresholdC");
+    }
     http.end();
+
+    return result;
   }
 
   bool postReading(float voltage, float current, float temperature,
@@ -86,6 +103,31 @@ class BackendClient {
   }
 
  private:
+  // Pulls a numeric field out of a flat JSON object. Naive on purpose: the response
+  // is a small object of our own shape, so a substring scan is enough. Returns NAN
+  // when the key is missing or no digits follow it.
+  static float jsonNumber(const String &json, const char *key) {
+    String needle = String("\"") + key + "\"";
+    int at = json.indexOf(needle);
+    if (at < 0) return NAN;
+
+    int colon = json.indexOf(':', at + needle.length());
+    if (colon < 0) return NAN;
+
+    int i = colon + 1;
+    while (i < (int)json.length() && json[i] == ' ') i++;
+
+    int start = i;
+    while (i < (int)json.length()) {
+      char c = json[i];
+      if ((c >= '0' && c <= '9') || c == '.' || c == '-' || c == '+') i++;
+      else break;
+    }
+    if (i == start) return NAN;
+
+    return json.substring(start, i).toFloat();
+  }
+
   static void appendField(String &body, bool &first, const char *key,
                           float value, int digits) {
     if (isnan(value)) return;

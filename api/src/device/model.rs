@@ -54,3 +54,13 @@ pub struct NetworkInput {
     pub ssid: String,
     pub password: String,
 }
+
+/// Returned in the heartbeat response so the board can adopt the operator's alarm
+/// thresholds. The firmware compares these to its stored values and re-applies only
+/// when they differ, which is how an edit made while it was offline reaches it.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeartbeatAck {
+    pub load_threshold_va: f64,
+    pub temp_threshold_c: f64,
+}

@@ -1,7 +1,7 @@
 use chrono::Utc;
 use sqlx::PgPool;
 
-use crate::device::model::{DeviceStatus, Heartbeat, NetworkInput, WifiNetwork};
+use crate::device::model::{DeviceStatus, Heartbeat, HeartbeatAck, NetworkInput, WifiNetwork};
 use crate::error::{AppError, AppResult};
 use crate::readings::service as readings_service;
 use crate::settings::service as settings_service;
@@ -20,9 +20,10 @@ type Telemetry = (
     Option<i64>,
 );
 
-/// Records a firmware heartbeat into the singleton telemetry row. Absent fields
+/// Records a firmware heartbeat into the singleton telemetry row, then returns the
+/// current alarm thresholds so the board can adopt any operator change. Absent fields
 /// coalesce to the stored value, so a partial heartbeat never clears what it omits.
-pub async fn record_heartbeat(pool: &PgPool, heartbeat: &Heartbeat) -> AppResult<()> {
+pub async fn record_heartbeat(pool: &PgPool, heartbeat: &Heartbeat) -> AppResult<HeartbeatAck> {
     sqlx::query(
         "update device_telemetry set
              device_id = coalesce($1, device_id),
@@ -43,7 +44,12 @@ pub async fn record_heartbeat(pool: &PgPool, heartbeat: &Heartbeat) -> AppResult
     .execute(pool)
     .await?;
 
-    Ok(())
+    let settings = settings_service::load(pool).await?;
+
+    Ok(HeartbeatAck {
+        load_threshold_va: settings.load_threshold_va,
+        temp_threshold_c: settings.temp_threshold_c,
+    })
 }
 
 /// Live link state. The identity fields come from the newest reported telemetry and

@@ -1,15 +1,17 @@
-# DynaVolt
+# VITAL
 
 A Transformer Alert Management System for a 1 KVA distribution transformer, built as an electrical engineering thesis project at PHINMA Cagayan de Oro College, Carmen Campus.
 
-An ESP32 measures the transformer's supply and reports it to a Rust API, which stores every sample, raises alerts when a reading crosses a threshold, and serves live readings to an Expo app. Until the hardware is wired in, the API simulates the transformer from the clock so the whole system can be exercised end to end.
+An ESP32 measures the transformer and reports it to a Rust API, which stores every sample, raises alerts when a reading crosses a threshold, and serves live readings to an Expo app. The API can also simulate the transformer from the clock, so the whole system can be demonstrated end to end with or without the hardware wired in.
 
 ## What it does
 
 - Live monitoring of voltage, current, temperature and apparent power, with an animated AC waveform
-- Alerts raised automatically when load reaches **900 VA** or temperature reaches **40 °C**, with acknowledgement and response time
-- Historical logs with server-side search, filtering and pagination, plus a daily load trend
-- Configurable thresholds and ESP32 Wi-Fi settings
+- Alerts raised automatically when load reaches **900 VA** or temperature reaches **40 °C**, with acknowledgement and response time, plus a push notification that vibrates the phone
+- Historical logs with server-side search, source and status filtering, and pagination, plus a daily load trend
+- A data-source switch between the built-in simulation and a live ESP32; hardware readings only show while the board is reporting, otherwise the dashboard reads "No data"
+- Real device telemetry (IP, signal, uptime, firmware) reported by the board itself
+- Configurable thresholds and full account management
 - Two roles, decided by the account rather than a picker at sign-in
 
 | Role | Who | Can reach |
@@ -20,20 +22,20 @@ An ESP32 measures the transformer's supply and reports it to a Rust API, which s
 ## Architecture
 
 ```
-ESP32  ──POST /readings──>  Rust API  ──>  Neon PostgreSQL
-                              │
-Expo app  ──polls──────────────┘
+ESP32  ──POST /readings + /device/heartbeat──>  Rust API  ──>  PostgreSQL
+   (x-device-key)                                  │
+Expo app  ──polls, bearer token───────────────────┘
 ```
 
-The API is stateless. Serverless functions cannot keep a background loop alive, so simulated readings are a pure function of the clock, and a sample is persisted only when the newest stored row is older than `SAMPLE_INTERVAL_MS`. Polling fast does not flood the database.
+The API is stateless. Serverless functions cannot keep a background loop alive, so in simulation mode readings are a pure function of the clock, and a sample is persisted only when the newest stored row is older than `SAMPLE_INTERVAL_MS`. In hardware mode the ESP32 pushes readings and the API serves the latest one while it stays fresh.
 
 ## Tech stack
 
-**API** Rust, Axum 0.8, sqlx 0.8 against PostgreSQL (Neon), JWT (HS256) auth, argon2 password hashing. Deployed to Vercel in the `sin1` region, co-located with the database.
+**API** Rust, Axum 0.8, sqlx 0.8 against PostgreSQL (a session pooler is required), JWT (HS256) auth, argon2 password hashing. Deployed to Vercel in the `sin1` region, co-located with the database.
 
 **App** Expo SDK 54, Expo Router, React Native 0.81, NativeWind (Tailwind), React Native Reusables, react-native-reanimated and react-native-svg for the waveform and charts, Phosphor icons, KaTeX pre-rendered offline for the formulas.
 
-**Firmware** ESP32 with a PZEM-004T v3 energy meter and a DHT22 temperature and humidity sensor.
+**Firmware** ESP32 reading a PZEM-004T v3 energy meter and a DS18B20 contact temperature probe, switching a relay, and driving a 16x2 I2C LCD. Header-only C++ with one class per component.
 
 ## Project structure
 
@@ -43,11 +45,12 @@ api/            Rust API
   migrations/   SQL, applied in development and shared with production
   api/index.rs  Vercel serverless entrypoint
 app/            Expo application
-  src/app/      Expo Router routes; (tabs) holds the four screens
+  src/app/      Expo Router routes; (tabs) holds the screens
   src/features/ API clients and types, split by domain
   src/components/
-  scripts/      build-time asset generation
-esp32/          firmware
+esp32/          firmware (see esp32/structure.txt and esp32/pins.txt)
+  esp32.ino     mode selector: REAL_MODE, plus DS18B20 / LCD / PZEM / backend tests
+  src/          config, hardware, net, core, tests (header-only classes)
 ```
 
 ## Getting started
@@ -57,11 +60,10 @@ esp32/          firmware
 Create `api/.env`:
 
 ```
-DATABASE_URL=postgres://...
+DATABASE_URL=postgres://...      # a session pooler, not a transaction pooler
 JWT_SECRET=a-long-random-string
+DEVICE_API_KEY=a-long-random-string
 PORT=8080
-SIMULATOR_ENABLED=true
-SAMPLE_INTERVAL_MS=15000
 ```
 
 ```bash
@@ -69,7 +71,7 @@ cd api
 cargo run
 ```
 
-The development server applies migrations on start. Production never migrates: both share one database, so running the development server is what production sees.
+The development server applies migrations on start. Production never migrates: both share one database, so running the development server (or a one-off connection) is how production picks up a new migration.
 
 ### Accounts
 
@@ -87,11 +89,12 @@ async fn main() -> AppResult<()> {
     let pool = db::connect(&Config::from_env()?.database_url).await?;
 
     sqlx::query(
-        "insert into users (email, password_hash, role, first_name, last_name)
-         values ($1, $2, $3, $4, $5)
+        "insert into users (email, username, password_hash, role, first_name, last_name)
+         values ($1, $2, $3, $4, $5, $6)
          on conflict (email) do update set password_hash = excluded.password_hash",
     )
     .bind("you@example.com")
+    .bind("you")
     .bind(password::hash("your-password")?)
     .bind(Role::Admin.as_str())
     .bind("Your")
@@ -103,11 +106,13 @@ async fn main() -> AppResult<()> {
 }
 ```
 
+> The Rust crate is named `dynavolt_api` for continuity with the deployment; the product is VITAL. Renaming the crate is a separate, deploy-affecting change.
+
 ```bash
 cargo run --bin seed
 ```
 
-Further accounts can be created from the app by an admin.
+Further accounts can be created and edited from the app by an admin. Sign in with an email or a username.
 
 ### App
 
@@ -123,53 +128,63 @@ pnpm install
 pnpm expo start
 ```
 
-Open it in Expo Go (SDK 54) or a development build. A phone cannot reach `localhost`, so point `EXPO_PUBLIC_API_URL` at your machine's LAN address or a deployed API.
+Open it in Expo Go (SDK 54), or build a standalone APK with EAS (`eas build -p android --profile preview`) for the real app icon and push notifications. A phone cannot reach `localhost`, so point `EXPO_PUBLIC_API_URL` at your machine's LAN address or a deployed API.
+
+### Firmware
+
+Copy `esp32/secrets.example.h` to `esp32/secrets.h` (gitignored) and fill in `WIFI_SSID`, `WIFI_PASSWORD`, `BACKEND_URL` and `DEVICE_KEY` (the key must match the API's `DEVICE_API_KEY`). Install the libraries listed in `esp32/structure.txt` (hd44780, OneWire, DallasTemperature, PZEM004Tv30), pick a mode at the top of `esp32.ino`, and flash. `esp32/pins.txt` documents the wiring.
 
 ## API
 
-Everything is under `/api/v1`. All routes except `/health` and `/auth/login` need a bearer token.
+Everything is under `/api/v1`. All routes except `/health` and `/auth/login` need a bearer token, except the ingest and device endpoints, which authenticate with the `x-device-key` header.
 
 | Route | Method | Access | Notes |
 |---|---|---|---|
-| `/health` | GET | public | Returns the check time, UTC and local |
-| `/auth/login` | POST | public | Returns a token and the account |
-| `/auth/me` | GET | any | The current account |
-| `/readings/latest` | GET | any | Live heartbeat plus thresholds |
-| `/readings` | GET | admin | Paginated history; `q`, `status`, `limit`, `offset` |
-| `/readings` | POST | public | Hardware ingest |
+| `/health` | GET | public | Check time, UTC and local |
+| `/auth/login` | POST | public | Email or username; returns a token and the account |
+| `/auth/me` | GET / PUT | any | Read or update the current account |
+| `/auth/password` | PUT | any | Change own password |
+| `/readings/latest` | GET | any | Live reading plus thresholds and link state |
+| `/readings` | GET | admin | Paginated history; `q`, `status`, `source`, `limit`, `offset` |
+| `/readings` | POST | device key | Hardware ingest; any subset of the fields |
 | `/readings/trend` | GET | admin | Daily averages; `days` |
 | `/alerts` | GET | any | Paginated; `q`, `kind`, `active`, `limit`, `offset` |
 | `/alerts/{id}/ack` | POST | any | Acknowledge, recording response time |
 | `/settings` | GET / PUT | any / admin | Thresholds |
-| `/device/status` | GET | any | ESP32 link state |
-| `/device/history` | GET | any | Connection events |
-| `/device/wifi` | GET / PUT | admin | Network the board connects to |
+| `/settings/source` | PUT | admin | Switch simulation or hardware |
+| `/device/status` | GET | any | Live link state and telemetry |
+| `/device/heartbeat` | POST | device key | Board reports its IP, signal, uptime, firmware |
 | `/users` | GET / POST | admin | List and create |
-| `/users/{id}` | DELETE | admin | Remove |
+| `/users/{id}` | PUT / DELETE | admin | Edit or remove |
 
 List endpoints return `{ rows, total, limit, offset }`. `total` counts every row matching the filters, not just the returned window.
 
 ### Readings
 
-An ingest must carry `voltageV`, `currentA` and `temperatureC`. The rest are optional, so a board without a PZEM still reports:
+An ingest may carry any subset of the fields, so a board with only a temperature probe still reports:
+
+```json
+{ "temperatureC": 31.5 }
+```
+
+A fully wired board reports:
 
 ```json
 {
   "voltageV": 230.1, "currentA": 3.2, "temperatureC": 31.5,
-  "powerW": 690.2, "powerFactor": 0.94, "frequencyHz": 60.01,
-  "energyKwh": 12.5, "humidityPct": 58
+  "powerW": 690.2, "powerFactor": 0.94, "frequencyHz": 60.01, "energyKwh": 12.5
 }
 ```
 
-Apparent power is derived as `S = V * I`. Reactive power is derived from the power triangle, `Q = sqrt(S^2 - P^2)`, and is only reported when real power was measured, since it cannot be recovered from apparent power alone.
+Missing measurements are stored as null and shown as "No data" in the app. Apparent power is derived as `S = V * I` when both are present. Reactive power is derived from the power triangle, `Q = sqrt(S^2 - P^2)`, only when real power was measured.
 
 ## Notes
 
-- `SIMULATOR_ENABLED=false` makes the API serve the newest stored reading instead of the clock. Flip it once the ESP32 is reporting.
-- `SAMPLE_INTERVAL_MS` throttles writes, not the dashboard: the live view polls every second regardless. It defaults to 15s because a transformer's thermal behaviour moves over minutes, and storing every 1.5s filled the database roughly ten times faster for no extra insight.
+- The data source is a runtime setting, not an environment variable. In hardware mode the API serves the newest hardware reading only while it is within a 30 second window; after that the dashboard reads "No data".
+- `SAMPLE_INTERVAL_MS` throttles writes, not the dashboard: the live view polls every second regardless. It defaults to 15s because a transformer's thermal behaviour moves over minutes.
 - The database must be reached through a **session** pooler. sqlx names prepared statements per connection, so a transaction pooler multiplexes them onto shared backends and fails with `42P05 ... already exists` on about half of all requests.
-- After changing an environment variable on Vercel, deploy with `--force`. A cached build keeps the old environment and every request fails with `failed to load env vars`.
-- `POST /readings` is currently unauthenticated. It needs a device key before the board is exposed to a real network.
+- After changing an environment variable on Vercel, deploy with `--force`. A cached build keeps the old environment.
+- Hardware ingest requires the `x-device-key` header to match the API's `DEVICE_API_KEY`; with no key set, ingest is rejected.
 - The grid here runs at **60 Hz**; the nominal supply is 230 V.
 - Times are stamped in UTC and rendered at UTC+8.
 
@@ -178,7 +193,7 @@ Apparent power is derived as `S = V * I`. Reactive power is derived from the pow
 From `app/`:
 
 - `pnpm expo start` starts the development server
-- `node scripts/build-katex-assets.mjs` regenerates the offline KaTeX assets
+- `eas build -p android --profile preview` builds an installable APK
 
 From `api/`:
 
@@ -189,3 +204,4 @@ From `api/`:
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+</content>

@@ -5,7 +5,7 @@ use axum::{Json, Router};
 use serde_json::{Map, Value};
 
 use crate::auth::extract::{AdminUser, AuthUser, DeviceAuth};
-use crate::device::model::{DeviceStatus, Heartbeat, NetworkInput, WifiNetwork};
+use crate::device::model::{DeviceStatus, Heartbeat, HeartbeatAck, NetworkInput, WifiNetwork};
 use crate::device::service;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
@@ -66,15 +66,14 @@ async fn status(State(state): State<AppState>, _auth: AuthUser) -> AppResult<Jso
     Ok(Json(service::status(&state.pool).await?))
 }
 
-/// Device only: the firmware self-reports its identity and link telemetry here.
+/// Device only: the firmware self-reports its identity and link telemetry here, and
+/// gets the current alarm thresholds back so it can adopt any operator change.
 async fn heartbeat(
     State(state): State<AppState>,
     _device: DeviceAuth,
     Json(body): Json<Heartbeat>,
-) -> AppResult<StatusCode> {
-    service::record_heartbeat(&state.pool, &body).await?;
-
-    Ok(StatusCode::NO_CONTENT)
+) -> AppResult<Json<HeartbeatAck>> {
+    Ok(Json(service::record_heartbeat(&state.pool, &body).await?))
 }
 
 /// Admin only: the response carries the passphrases in clear text.

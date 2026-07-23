@@ -80,7 +80,7 @@ Input only (no outputs, no pull ups): SVP (36), SVN (39), P34, P35.
 Strapping pins (state at boot matters): P0, P2, P5, P12, P15.
 ADC2 pins (25, 26, 27, 14, 12, 13, 4, 2, 15) cannot do analogRead while Wi-Fi is on; use ADC1 (32, 33, 34, 35, 36, 39) for analog sensors.
 
-DYNAVOLT WIRING PLAN
+VITAL WIRING PLAN
 --------------------
 PZEM-004T v3 (energy meter, UART):
   PZEM TX  -> P16 (RX2)

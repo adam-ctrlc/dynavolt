@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <Preferences.h>
 
 #include "../config/Pins.h"
 #include "Monitor.h"
@@ -29,6 +30,13 @@ class Main {
   void begin() {
     Serial.begin(115200);
     monitor.begin();
+
+    // Adopt the last thresholds seen so a reboot keeps the operator's values instead
+    // of falling back to the compiled defaults until the first heartbeat lands.
+    prefs.begin("vital", false);
+    monitor.setThresholds(prefs.getFloat("loadVa", 900.0f),
+                          prefs.getFloat("tempC", 40.0f));
+
     net.connect();
   }
 
@@ -49,11 +57,36 @@ class Main {
     if (now - lastHeartbeat >= HEARTBEAT_INTERVAL_MS) {
       lastHeartbeat = now;
       net.connect();
-      backend.postHeartbeat();
+      applyThresholds(backend.postHeartbeat());
     }
   }
 
  private:
+  // Adopts thresholds from a heartbeat, but only when they are valid and actually
+  // changed, so unchanged heartbeats never wear the flash. Persisting them means an
+  // edit made while the board was offline sticks once it reconnects and reboots.
+  void applyThresholds(const BackendClient::HeartbeatResult &ack) {
+    if (!ack.ok) return;
+
+    float va = ack.loadThresholdVa;
+    float temp = ack.tempThresholdC;
+    if (isnan(va) || isnan(temp) || va <= 0.0f || temp <= 0.0f) return;
+
+    if (fabs(va - monitor.loadThreshold()) < 0.05f &&
+        fabs(temp - monitor.tempThreshold()) < 0.05f) {
+      return;
+    }
+
+    monitor.setThresholds(va, temp);
+    prefs.putFloat("loadVa", va);
+    prefs.putFloat("tempC", temp);
+
+    Serial.print("thresholds updated -> VA:");
+    Serial.print(va, 0);
+    Serial.print(" TEMP:");
+    Serial.println(temp, 0);
+  }
+
   Lcd lcd;
   BackendClient backend;
   WifiLink net;
@@ -61,6 +94,7 @@ class Main {
   TemperatureProbe probe;
   Relay relay;
   Monitor monitor;
+  Preferences prefs;
   unsigned long lastPost = 0;
   unsigned long lastHeartbeat = 0;
 };

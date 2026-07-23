@@ -37,7 +37,7 @@ async fn update(
     let settings = sqlx::query_as::<_, Settings>(
         "update settings set load_threshold_va = $1, temp_threshold_c = $2, updated_at = now()
          where id = 1
-         returning load_threshold_va, temp_threshold_c, updated_at",
+         returning load_threshold_va, temp_threshold_c, source_mode, updated_at",
     )
     .bind(body.load_threshold_va)
     .bind(body.temp_threshold_c)
