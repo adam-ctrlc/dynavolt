@@ -33,28 +33,6 @@ pub struct Heartbeat {
     pub uptime_seconds: Option<i64>,
 }
 
-/// One stored Wi-Fi network. `password` is returned in clear text on the admin and
-/// device endpoints, which are guarded accordingly. `is_default` marks the board's
-/// compiled-in credentials; `selected` marks the operator's preferred network. The
-/// partial unique indexes allow at most one of each across the table.
-#[derive(Debug, Clone, Serialize, sqlx::FromRow)]
-#[serde(rename_all = "camelCase")]
-pub struct WifiNetwork {
-    pub id: i64,
-    pub ssid: String,
-    pub password: String,
-    pub is_default: bool,
-    pub selected: bool,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NetworkInput {
-    pub ssid: String,
-    pub password: String,
-}
-
 /// Returned in the heartbeat response so the board can adopt the operator's alarm
 /// thresholds. The firmware compares these to its stored values and re-applies only
 /// when they differ, which is how an edit made while it was offline reaches it.
